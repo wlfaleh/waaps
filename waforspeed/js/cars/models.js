@@ -3,7 +3,8 @@
    sinon la voiture provisoire de procedural.js. Le reste du jeu ne voit pas la différence. */
 'use strict';
 
-const realModels = new Map();   // id -> { root, repaint, tris }
+const realModels = new Map();
+const envMats = new Set();   // matériaux des vrais modèles qui affichent les reflets   // id -> { root, repaint, tris }
 const modelStatus = new Map();  // id -> 'none' | 'loading' | 'ok' | 'error'
 const MODEL_RX = {
   paint: /(car_?paint|paint|body|carros|kaross|exterior|lack)/i,
@@ -73,7 +74,7 @@ function prepareModel(root, car, spec) {
     tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
     for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
       const n = (m.name || '') + ' ' + (o.name || '');
-      if (m.isMeshStandardMaterial && !m.envMap) { m.envMap = MAT.env; m.envMapIntensity = 0.5; m.needsUpdate = true; }
+      if (m.isMeshStandardMaterial) { if (!m.envMap) { m.envMap = MAT.env; m.envMapIntensity = 0.5; m.needsUpdate = true; } envMats.add(m); }
       if (rx.tail.test(n)) m.userData.wfs = 'tail';
       else if (MODEL_RX.head.test(n)) { m.userData.wfs = 'head'; if (m.emissive) { m.emissive.set(0xfff3dc); m.emissiveIntensity = 1; } }
       else if (rx.paint.test(n) && !MODEL_RX.notPaint.test(n)) { m.userData.wfs = 'paint'; repaint = true; }
@@ -85,7 +86,7 @@ function prepareModel(root, car, spec) {
 const repaintCache = new Map();
 function repaintMat(m, hex) {
   const key = m.uuid + hex;
-  if (!repaintCache.has(key)) { const c = m.clone(); c.color.set(hex); repaintCache.set(key, c); }
+  if (!repaintCache.has(key)) { const c = m.clone(); c.color.set(hex); repaintCache.set(key, c); if (c.envMap) envMats.add(c); }
   return repaintCache.get(key);
 }
 /* Le trafic n'utilise les vrais modèles qu'en graphismes « haute » et s'ils sont assez légers. */
@@ -101,7 +102,7 @@ function realBody(car, paintHex, opts) {
     const arr = Array.isArray(o.material);
     const mats = (arr ? o.material : [o.material]).map((m) => {
       if (m.userData.wfs === 'paint' && R.repaint) return repaintMat(m, paintHex);
-      if (m.userData.wfs === 'tail' && opts.tailMat) { const t = m.clone(); tails.push(t); return t; }
+      if (m.userData.wfs === 'tail' && opts.tailMat) { const t = m.clone(); tails.push(t); if (t.envMap) envMats.add(t); return t; }
       return m;
     });
     o.material = arr ? mats : mats[0];
@@ -153,7 +154,8 @@ function rigWheels(obj, car) {
 
 /* Point d'entrée unique : construit une voiture (vraie ou provisoire) prête à poser sur la piste. */
 function makeCarMesh(car, paintHex, opts = {}) {
-  const body = realBody(car, paintHex, opts) || proceduralBody(car, paintHex, opts);
+  const real = realBody(car, paintHex, opts);
+  const body = real || proceduralBody(car, paintHex, opts);
   const L = car.d.L, Wd = car.d.W;
   const g = new THREE.Group();
   g.rotation.order = 'YXZ';
@@ -177,6 +179,7 @@ function makeCarMesh(car, paintHex, opts = {}) {
     for (const [z, y, w] of [[L / 2 + 0.03, by, 0.2], [-L / 2 - 0.03, fy, 0.16]]) {
       const lamp = new THREE.Mesh(blinkGeo, MAT.blinkOff);
       lamp.scale.set(w, 0.09, 0.04); lamp.position.set(side * (Wd / 2 - 0.1), y, z);
+      if (real) lamp.visible = false;   // le vrai modèle a ses propres feux : on ne garde que le halo
       inner.add(lamp);
       const halo = new THREE.Sprite(MAT.blinkHalo);
       halo.scale.set(1.5, 1.5, 1); halo.position.set(side * (Wd / 2 - 0.05), y, z + Math.sign(z) * 0.08); halo.visible = false;

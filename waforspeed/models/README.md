@@ -7,7 +7,7 @@ Dès qu'un vrai modèle est déposé ici et déclaré dans le catalogue, le jeu 
 
 | Voiture | Fichier à déposer |
 |---|---|
-| Golf 8 | `models/golf8.glb` |
+| Golf GTI | `models/golf-gti/scene.gltf` — **déjà en place** : « 2016 Volkswagen Golf GTI Clubsport Mk7 » par Ddiaz Design (Sketchfab), CC BY-NC-SA 4.0 (voir `golf-gti/license.txt`) |
 | BMW X1 | `models/bmw-x1.glb` |
 | Clio | `models/clio.glb` |
 | T-Roc | `models/t-roc.glb` |
