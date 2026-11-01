@@ -26,29 +26,49 @@ function getLoader(file) {
   }
   return Promise.resolve(THREE.GLTFLoader ? new THREE.GLTFLoader() : null);
 }
+/* Chargement progressif : une voiture à la fois, la voiture du joueur d'abord.
+   Sur ordinateur, toutes les voitures suivent en arrière-plan ; sur mobile, seulement
+   celles qu'on affiche (garage, adversaire du duel), pour ne pas tout télécharger. */
+const modelQueue = [];
+let modelBusy = false;
 function loadRealModels() {
   for (const car of CARS) modelStatus.set(car.id, 'none');
-  for (const car of CARS) {
-    const spec = CAR_MODELS[car.id];
-    if (!spec || !spec.file) continue;
-    modelStatus.set(car.id, 'loading');
-    const fail = (e) => {
-      console.warn('Modèle 3D introuvable ou illisible pour ' + car.name + ' (' + spec.file + '), voiture provisoire utilisée.', e);
-      modelStatus.set(car.id, 'error');
-      if (state === 'garage') renderGarageUI();
-    };
-    getLoader(spec.file).then((loader) => {
-      if (!loader) throw new Error('chargeur indisponible');
-      loader.load(spec.file, (res) => {
-        try {
-          // GLB/glTF et Collada renvoient tous deux une scène dans .scene
-          realModels.set(car.id, prepareModel(res.scene, car, spec));
-          modelStatus.set(car.id, 'ok');
-          onModelReady(car);
-        } catch (e) { fail(e); }
-      }, undefined, fail);
-    }).catch(fail);
-  }
+  requestModel(myCar.id);
+  if (!isTouch) for (const car of CARS) requestModel(car.id, true);
+}
+function requestModel(id, later) {
+  const spec = CAR_MODELS[id];
+  if (!spec || !spec.file || modelStatus.get(id) !== 'none') return;
+  const i = modelQueue.indexOf(id);
+  if (i >= 0) { if (!later) { modelQueue.splice(i, 1); modelQueue.unshift(id); } return; }
+  if (later) modelQueue.push(id); else modelQueue.unshift(id);
+  nextModel();
+}
+function nextModel() {
+  if (modelBusy || !modelQueue.length) return;
+  const car = carById(modelQueue.shift()), spec = CAR_MODELS[car.id];
+  modelBusy = true;
+  modelStatus.set(car.id, 'loading');
+  if (state === 'garage') renderGarageUI();
+  const done = () => { modelBusy = false; nextModel(); };
+  const fail = (e) => {
+    console.warn('Modèle 3D introuvable ou illisible pour ' + car.name + ' (' + spec.file + '), voiture provisoire utilisée.', e);
+    modelStatus.set(car.id, 'error');
+    if (state === 'garage') renderGarageUI();
+    done();
+  };
+  getLoader(spec.file).then((loader) => {
+    if (!loader) throw new Error('chargeur indisponible');
+    loader.load(spec.file, (res) => {
+      try {
+        // GLB/glTF et Collada renvoient tous deux une scène dans .scene
+        realModels.set(car.id, prepareModel(res.scene, car, spec));
+        modelStatus.set(car.id, 'ok');
+        onModelReady(car);
+      } catch (e) { fail(e); return; }
+      done();
+    }, undefined, fail);
+  }).catch(fail);
 }
 
 /* Met le modèle à l'échelle (longueur réelle de la voiture), le pose au sol,
@@ -65,21 +85,31 @@ function prepareModel(root, car, spec) {
   box = new THREE.Box3().setFromObject(wrap);
   const c = box.getCenter(new THREE.Vector3());
   root.position.x -= c.x; root.position.z -= c.z; root.position.y -= box.min.y;
+  splitWheels(wrap, car, spec);
 
   const rx = { paint: spec.paint ? new RegExp(spec.paint, 'i') : MODEL_RX.paint, tail: spec.tail ? new RegExp(spec.tail, 'i') : MODEL_RX.tail };
   let repaint = false, tris = 0;
+  // un matériau peut servir à plusieurs pièces : on regarde les noms de toutes ses pièces
+  const users = new Map();
   root.traverse((o) => {
     if (!o.isMesh) return;
     const g = o.geometry;
     tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
     for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-      const n = (m.name || '') + ' ' + (o.name || '');
-      if (m.isMeshStandardMaterial) { if (!m.envMap) { m.envMap = MAT.env; m.envMapIntensity = 0.5; m.needsUpdate = true; } envMats.add(m); }
-      if (rx.tail.test(n)) m.userData.wfs = 'tail';
-      else if (MODEL_RX.head.test(n)) { m.userData.wfs = 'head'; if (m.emissive) { m.emissive.set(0xfff3dc); m.emissiveIntensity = 1; } }
-      else if (rx.paint.test(n) && !MODEL_RX.notPaint.test(n)) { m.userData.wfs = 'paint'; repaint = true; }
+      if (!users.has(m)) users.set(m, []);
+      users.get(m).push((o.name || '') + ' ' + (o.parent ? o.parent.name || '' : ''));
     }
   });
+  const NOT_LAMP = /(brake(?!.?l(ight|amp))|disc|disk|calip|callip|tire|tyre|rim|wheel|bottom|under|interior|seat|door)/i;
+  for (const [m, names] of users) {
+    const mn = m.name || '';
+    // vrai si le nom du matériau correspond, ou si toutes les pièces qui l'utilisent correspondent
+    const all = (re) => re.test(mn) || names.every((n) => re.test(n) && !NOT_LAMP.test(n));
+    if (m.isMeshStandardMaterial) { if (!m.envMap) { m.envMap = MAT.env; m.envMapIntensity = 0.5; m.needsUpdate = true; } envMats.add(m); }
+    if (spec.paint ? rx.paint.test(mn) : (all(rx.paint) && !MODEL_RX.notPaint.test(mn + ' ' + names.join(' ')))) { m.userData.wfs = 'paint'; repaint = true; }
+    else if (all(rx.tail)) m.userData.wfs = 'tail';
+    else if (all(MODEL_RX.head)) { m.userData.wfs = 'head'; if (m.emissive) { m.emissive.set(0xfff3dc); m.emissiveIntensity = 1; } }
+  }
   return { root: wrap, repaint: spec.repaint === false ? false : repaint, tris };
 }
 
@@ -117,6 +147,68 @@ function realBody(car, paintHex, opts) {
 /* Roues d'un vrai modèle : on repère les nœuds nommés « wheel », « roue », « tire »…
    et on les accroche à un pivot (braquage) puis à un axe (rotation). Sans nœud de roue,
    la voiture roule simplement sans animation de roues. */
+/* Certains modèles regroupent les 4 roues dans un seul objet (une pièce par matériau).
+   On découpe alors cet objet en 4 morceaux, un par coin de la voiture, pour que chaque roue
+   puisse braquer et tourner. Les objets sans nom reconnaissable sont aussi testés par leur forme :
+   4 morceaux ronds posés au sol, de la taille d'une roue. */
+function subGeometry(g, tris) {
+  const src = g.index, map = new Map(), order = [];
+  const vid = (t, k) => (src ? src.getX(t * 3 + k) : t * 3 + k);
+  const idx = [];
+  for (const t of tris) for (let k = 0; k < 3; k++) {
+    const v = vid(t, k);
+    if (!map.has(v)) { map.set(v, order.length); order.push(v); }
+    idx.push(map.get(v));
+  }
+  const out = new THREE.BufferGeometry();
+  for (const name in g.attributes) {
+    const a = g.attributes[name], n = a.itemSize, arr = new a.array.constructor(order.length * n);
+    const get = [a.getX, a.getY, a.getZ, a.getW];
+    order.forEach((v, i) => { for (let c = 0; c < n; c++) arr[i * n + c] = get[c].call(a, v); });
+    out.setAttribute(name, new THREE.BufferAttribute(arr, n, a.normalized));
+  }
+  out.setIndex(idx);
+  return out;
+}
+function splitWheels(wrap, car, spec) {
+  const rx = spec.wheel ? new RegExp(spec.wheel, 'i') : WHEEL_RX;
+  wrap.updateMatrixWorld(true);
+  const list = [];
+  wrap.traverse((o) => { if (o.isMesh && !Array.isArray(o.material) && !o.isSkinnedMesh) list.push(o); });
+  const p = new THREE.Vector3(), q = new THREE.Vector3(), r = new THREE.Vector3();
+  for (const o of list) {
+    const name = (o.name || '') + ' ' + (o.parent ? o.parent.name || '' : '') + ' ' + (o.material.name || '');
+    if (/calip|callip|brake|etrier/i.test(name)) continue;
+    const named = rx.test(name);
+    const bb = new THREE.Box3().setFromObject(o), sz = bb.getSize(new THREE.Vector3());
+    if (bb.min.y > 0.12 || bb.max.y > car.d.rw * 2.8) continue;       // pas posé au sol, ou trop haut
+    if (sz.x < 1.0 && sz.z < 1.0) { if (!named && looksLikeWheel(bb, sz, car)) o.userData.wfsWheel = true; continue; }   // déjà une seule roue
+    const g = o.geometry, pos = g.attributes.position, nt = (g.index ? g.index.count : pos.count) / 3;
+    const parts = { LF: [], RF: [], LB: [], RB: [] };
+    for (let t = 0; t < nt; t++) {
+      const v = (k) => (g.index ? g.index.getX(t * 3 + k) : t * 3 + k);
+      p.fromBufferAttribute(pos, v(0)).applyMatrix4(o.matrixWorld);
+      q.fromBufferAttribute(pos, v(1)).applyMatrix4(o.matrixWorld);
+      r.fromBufferAttribute(pos, v(2)).applyMatrix4(o.matrixWorld);
+      const cx = p.x + q.x + r.x, cz = p.z + q.z + r.z;
+      parts[(cx > 0 ? 'R' : 'L') + (cz < 0 ? 'F' : 'B')].push(t);
+    }
+    const keys = Object.keys(parts).filter((k) => parts[k].length);
+    if (keys.length < 4) continue;
+    const subs = keys.map((k) => { const m = new THREE.Mesh(subGeometry(g, parts[k]), o.material); m.name = (o.name || 'roue') + '_wheel_' + k; return m; });
+    // chaque morceau doit avoir la taille d'une roue
+    const ok = subs.every((m) => {
+      m.matrix.copy(o.matrixWorld); m.matrix.decompose(m.position, m.quaternion, m.scale); m.updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(m), s2 = b.getSize(new THREE.Vector3());
+      return s2.z < 1.0 && s2.y < 1.0 && s2.x < 0.6 && (named || looksLikeWheel(b, s2, car));
+    });
+    if (!ok) continue;
+    for (const m of subs) { m.userData.wfsWheel = true; m.castShadow = o.castShadow; wrap.add(m); }
+    o.parent.remove(o);
+  }
+}
+const looksLikeWheel = (b, s, car) => b.min.y < 0.08 && s.y > car.d.rw * 1.5 && s.y < car.d.rw * 2.6 && Math.abs(s.y - s.z) < 0.12 && s.x < 0.45;
+
 const WHEEL_RX = /(wheel|roue|tire|tyre|pneu|(^|[^a-z])rim([^a-z]|$))/i;   // « rim » seul, pas « trim »
 /* Roues d'un vrai modèle : on repère les morceaux de roue (nom contenant wheel, roue, tire, rim…),
    on les regroupe par coin de la voiture, puis chaque roue est accrochée à un pivot (braquage)
@@ -128,8 +220,8 @@ function rigWheels(obj, car) {
   const groups = new Map();
   obj.traverse((o) => {
     if (!o.isMesh) return;
-    const name = (o.name || '') + ' ' + (o.parent ? o.parent.name || '' : '');
-    if (!rx.test(name) || /calip|callip|brake|etrier/i.test(name)) return;
+    const name = (o.name || '') + ' ' + (o.parent ? o.parent.name || '' : '') + ' ' + (Array.isArray(o.material) ? '' : o.material.name || '');
+    if (!(rx.test(name) || o.userData.wfsWheel) || /calip|callip|brake|etrier/i.test(name)) return;
     const bb = new THREE.Box3().setFromObject(o), c = bb.getCenter(new THREE.Vector3()), sz = bb.getSize(new THREE.Vector3());
     // une pièce de roue est près du sol et pas plus grande qu'une roue
     if (c.y > car.d.rw * 1.8 || sz.y > 1.0 || sz.z > 1.0) return;

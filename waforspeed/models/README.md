@@ -3,18 +3,27 @@
 Les voitures que tu vois dans le jeu aujourd'hui sont **provisoires** : elles sont générées par le code (`js/cars/procedural.js`).
 Dès qu'un vrai modèle est déposé ici et déclaré dans le catalogue, le jeu l'utilise à la place, sans autre changement.
 
-## Fichiers attendus
+## Modèles en place
 
-| Voiture | Fichier à déposer |
-|---|---|
-| Golf GTI | `models/golf-gti/golf-gti.json` (glTF avec données et textures intégrées) — **déjà en place** : « 2016 Volkswagen Golf GTI Clubsport Mk7 » par Ddiaz Design (Sketchfab), CC BY-NC-SA 4.0 (voir `golf-gti/license.txt`) |
-| BMW X1 | `models/bmw-x1.glb` |
-| Clio | `models/clio.glb` |
-| T-Roc | `models/t-roc.glb` |
-| BMW Cabriolet | `models/bmw-cabriolet.glb` |
-| Audi A3 | `models/audi-a3.glb` |
+Tous trouvés dans des dépôts GitHub publics, avec leur licence d'origine (Sketchfab). Chaque dossier contient le modèle (`.json` = glTF avec données et textures intégrées) et son `license.txt`.
 
-Puis, dans `js/cars/catalog.js`, remplace `file: null` par le chemin du fichier (il est déjà écrit en commentaire à côté), et remplis `credit`.
+| Voiture du jeu | Modèle réel | Auteur | Licence |
+|---|---|---|---|
+| Golf 8 GTI | `golf-8/` — Volkswagen Golf 8 GTI (A8) | GT Cars: Hyperspeed | CC BY 4.0 |
+| BMW X5 | `bmw-x5/` — 2024 BMW X5 xDrive40i | Ddiaz Design | CC BY-NC-SA 4.0 |
+| VW T-Cross | `vw-t-cross/` — 2021 Volkswagen T-Cross 280 TSI | Ddiaz Design | CC BY-NC-SA 4.0 |
+| BMW M4 | `bmw-m4/` — 2021 BMW M4 Competition | Ricy | CC BY 4.0 |
+| Audi A3 berline | `audi-a3/` — 2014 Audi S3 Limousine (A3 8V) | tonielpro520 | CC BY 4.0 |
+| Clio | aucun modèle libre trouvé : voiture générée par le code | — | — |
+
+Pas de BMW X1, de T-Roc, de BMW cabriolet ni de Clio sous licence libre trouvés : les modèles les plus proches ont été pris (X5, T-Cross, M4 coupé).
+Les modèles ont été allégés (≈ 100 000 à 140 000 triangles, textures WebP 1024 px) avec glTF-Transform.
+Les licences CC BY-NC-SA interdisent l'usage commercial : le jeu doit rester gratuit.
+
+## Ajouter ou remplacer un modèle
+
+Dépose le fichier (`.glb`, `.gltf` avec textures intégrées, ou `.json` comme ci-dessus) dans `models/`,
+puis, dans `js/cars/catalog.js`, mets son chemin dans `file` et remplis `credit`.
 
 ## Format
 
