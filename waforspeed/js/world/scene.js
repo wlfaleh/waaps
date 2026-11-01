@@ -97,7 +97,8 @@ function updateCamera(dt, sP) {
   trackPoint(sP, playerX * RW, tmpA);
   const car = playerMesh.position;
   // la caméra suit en partie l'orientation de la voiture : dans les virages on voit son flanc
-  const hd = tmpA.th + (playerYaw + spinYaw * 0.35) * (C.hood ? 1 : 0.6);
+  // pendant un tête-à-queue la caméra ne suit qu'un peu la rotation (elle reste derrière la route)
+  const hd = tmpA.th + playerYaw * (C.hood ? 1 : 0.6) + spinYaw * (C.hood ? 1 : 0.2);
   const fx = Math.sin(hd), fz = -Math.cos(hd), rx = Math.cos(hd), rz = Math.sin(hd);
   let desired, look;
   if (C.hood) {

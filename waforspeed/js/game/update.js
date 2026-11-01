@@ -101,7 +101,9 @@ function update(dt) {
   // tête-à-queue après un accident : la voiture tourne puis se remet droite
   controlLock = Math.max(0, controlLock - dt); scrapeCd -= dt;
   if (Math.abs(playerSpin) > 0.25) { spinYaw += playerSpin * dt; playerSpin *= Math.max(0, 1 - 2.4 * dt); playerX += playerSpin * 0.012 * dt * Math.min(1, speedPct * 3); }
-  else { playerSpin = 0; const tgt = Math.round(spinYaw / (Math.PI * 2)) * Math.PI * 2; spinYaw += (tgt - spinYaw) * Math.min(1, dt * 3); }
+  else { playerSpin = 0; spinYaw += (0 - spinYaw) * Math.min(1, dt * 3); if (Math.abs(spinYaw) < 0.002) spinYaw = 0; }
+  // angle ramené entre -π et +π : après un tour complet, la voiture et la caméra reviennent vraiment à 0
+  spinYaw = Math.atan2(Math.sin(spinYaw), Math.cos(spinYaw));
   const locked = controlLock > 0;
 
   position = wrap(position + dt * speed);
