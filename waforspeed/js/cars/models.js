@@ -89,7 +89,7 @@ function repaintMat(m, hex) {
   return repaintCache.get(key);
 }
 /* Le trafic n'utilise les vrais modèles qu'en graphismes « haute » et s'ils sont assez légers. */
-const realInTraffic = (R) => quality === 'high' && R.tris < 120000;
+const realInTraffic = (R) => quality === 'high' && !isTouch && R.tris < 120000;
 
 function realBody(car, paintHex, opts) {
   const R = realModels.get(car.id);
@@ -116,30 +116,37 @@ function realBody(car, paintHex, opts) {
 /* Roues d'un vrai modèle : on repère les nœuds nommés « wheel », « roue », « tire »…
    et on les accroche à un pivot (braquage) puis à un axe (rotation). Sans nœud de roue,
    la voiture roule simplement sans animation de roues. */
-const WHEEL_RX = /(wheel|roue|tire|tyre|pneu)/i;
+const WHEEL_RX = /(wheel|roue|tire|tyre|pneu|rim)/i;
+/* Roues d'un vrai modèle : on repère les morceaux de roue (nom contenant wheel, roue, tire, rim…),
+   on les regroupe par coin de la voiture, puis chaque roue est accrochée à un pivot (braquage)
+   et à un axe (rotation). Les étriers et le reste ne bougent pas. */
 function rigWheels(obj, car) {
   const spec = CAR_MODELS[car.id] || {};
   const rx = spec.wheel ? new RegExp(spec.wheel, 'i') : WHEEL_RX;
-  const found = [];
-  obj.traverse((o) => {
-    if (!rx.test(o.name || '')) return;
-    for (let p = o.parent; p; p = p.parent) if (found.includes(p)) return;
-    found.push(o);
-  });
   obj.updateMatrixWorld(true);
+  const groups = new Map();
+  obj.traverse((o) => {
+    if (!o.isMesh) return;
+    const name = (o.name || '') + ' ' + (o.parent ? o.parent.name || '' : '');
+    if (!rx.test(name) || /calip|callip|brake|etrier/i.test(name)) return;
+    const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+    const key = (c.x > 0 ? 'R' : 'L') + (c.z < 0 ? 'F' : 'B');
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(o);
+  });
   const wheels = [];
   let rw = car.d.rw;
-  for (const node of found) {
-    const box = new THREE.Box3().setFromObject(node);
-    if (box.isEmpty()) continue;
+  for (const [key, meshes] of groups) {
+    const box = new THREE.Box3();
+    for (const m of meshes) box.expandByObject(m);
     const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
-    if (sz.y > 1.2 || sz.y < 0.2) continue;
+    if (sz.y > 1.3 || sz.y < 0.25) continue;
     rw = sz.y / 2;
     const steerG = new THREE.Group(); steerG.position.copy(c);
     const spinG = new THREE.Group(); steerG.add(spinG);
     obj.add(steerG); obj.updateMatrixWorld(true);
-    spinG.attach(node);
-    wheels.push({ steer: steerG, spin: spinG, front: c.z < 0 });
+    for (const m of meshes) spinG.attach(m);
+    wheels.push({ steer: steerG, spin: spinG, front: key[1] === 'F' });
   }
   return { wheels, rw };
 }

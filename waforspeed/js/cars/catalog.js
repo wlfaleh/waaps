@@ -30,7 +30,7 @@ const CARS = [
    repaint  : false pour garder la couleur d'origine du modèle
    credit   : auteur et licence, affichés dans le garage (obligatoire pour une licence CC-BY) */
 const CAR_MODELS = {
-  golf:   { file: null /* 'models/golf8.glb' */, credit: '' },
+  golf:   { file: 'models/golf-gti/scene.gltf', credit: '« 2016 Volkswagen Golf GTI Clubsport Mk7 » par Ddiaz Design (Sketchfab), licence CC BY-NC-SA 4.0' },
   x1:     { file: null /* 'models/bmw-x1.glb' */, credit: '' },
   clio:   { file: null /* 'models/clio.glb' */, credit: '' },
   troc:   { file: null /* 'models/t-roc.glb' */, credit: '' },
