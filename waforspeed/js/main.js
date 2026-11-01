@@ -26,9 +26,12 @@ function boot() {
       glowGeo = shadowGeo;
       blinkGeo = new THREE.BoxGeometry(1, 1, 1);
       boardGeo = new THREE.PlaneGeometry(8, 3.2);
+      blurGeo = new THREE.CircleGeometry(1, 32);
       resetPoses();
+      setupReflections();
       buildPlayer();
       setupParticles();
+      applyEnv();
       loadRealModels();
       setupComposer();
     } catch (e) { console.error(e); renderer = null; }

@@ -172,6 +172,8 @@ function render3D(dt, t) {
   }
   updateParticles(dt);
   updateCamera(dt, sP);
+  lastDt = Math.max(dt, 1e-3);
+  updateReflections(playerMesh.position, playerMesh);
   // pales des éoliennes
   for (const g of chunks.values()) for (const r of g.userData.rotors || []) r.rotation.z += r.userData.spin * dt;
   if (headlight) headlight.intensity = ENV.headlight;
