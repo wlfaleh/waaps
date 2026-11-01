@@ -3,7 +3,7 @@
 Chromium et Playwright sont déjà installés (`require('playwright')`, ne pas réinstaller).
 
 ## Servir une copie de test
-Copier `waforspeed/` dans le dossier de travail temporaire, remplacer les scripts CDN par des copies locales (`lib/` : three r128, shaders, postprocessing, GLTFLoader, Tone) si le réseau est limité, puis `python3 -m http.server 8768`.
+Copier `waforspeed/` dans le dossier de travail temporaire, remplacer les scripts CDN par des copies locales (`lib/` : three r128, shaders, postprocessing, GLTFLoader) si le réseau est limité, puis `python3 -m http.server 8768`.
 
 ## Lancer le navigateur avec WebGL logiciel
 ```js

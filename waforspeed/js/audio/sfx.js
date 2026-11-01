@@ -5,7 +5,6 @@
 let actx = null, sfxGain = null, engA = null, engB = null, engFilter = null, engGain = null, noiseBuf = null;
 let muted = store('waforspeed-muted') === '1';
 function audioInit() {
-  Music.unlock();
   if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
   try {
     actx = new (window.AudioContext || window.webkitAudioContext)();
@@ -50,5 +49,4 @@ function beep(freq, at, dur) {
 function setMuted(m) {
   muted = m; store('waforspeed-muted', m ? '1' : '0');
   if (sfxGain) sfxGain.gain.value = m ? 0 : 0.5;
-  Music.setMuted(m);
 }

@@ -1,4 +1,4 @@
-/* WaForSpeed — Écrans (menu, garage, pause, fin), radio, clavier et commandes tactiles. */
+/* WaForSpeed — Écrans (menu, garage, pause, fin), clavier et commandes tactiles. */
 'use strict';
 
 /* ================= Écrans & états ================= */
@@ -14,8 +14,6 @@ function show(name) {
   for (const [k, el] of Object.entries(screens)) el.hidden = k !== name;
   $('#hud').hidden = !(name === null || name === 'pause');
   $('#touch').hidden = !(isTouch && name === null);
-  $('#radio').hidden = name === null;
-  if (name === null) $('#radioMsg').hidden = true;
 }
 function startRace() {
   audioInit();
@@ -24,7 +22,6 @@ function startRace() {
   for (const k in input) input[k] = false;
   state = 'count';
   show(null);
-  Music.forRace();
   Object.keys(last).forEach((k) => delete last[k]);
   updateHud();
 }
@@ -221,22 +218,6 @@ function watchPerf(raw) {
   }
 }
 
-/* ---------- Radio ---------- */
-function renderRadio() {
-  $('#radioName').textContent = Music.name || '—';
-  $('#radio').classList.toggle('on', Music.playing);
-  $('#radioPlay').setAttribute('aria-label', Music.playing ? 'Pause' : 'Lecture');
-  $('#radioPlayIcon').innerHTML = Music.playing ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>' : '<path d="M7 4v16l13-8z"/>';
-}
-Music.onChange(renderRadio);
-$('#radioPlay').addEventListener('click', () => { audioInit(); Music.toggle(); });
-$('#radioNext').addEventListener('click', () => { audioInit(); Music.next(); });
-$('#radioPrev').addEventListener('click', () => { audioInit(); Music.prev(); });
-$('#musicVol').value = String(Math.round(Music.volume * 100));
-$('#musicVol').addEventListener('input', (e) => Music.setVolume(e.target.value / 100));
-$('#musicFiles').addEventListener('change', (e) => { audioInit(); Music.addFiles(e.target.files); e.target.value = ''; });
-if (!Music.available) msg('La radio intégrée n\'a pas pu se charger. Tu peux quand même ajouter tes musiques avec +.');
-
 /* ---------- Clavier & tactile ---------- */
 const KEYMAP = {
   ArrowUp: 'up', KeyW: 'up', KeyZ: 'up', ArrowDown: 'down', KeyS: 'down',
@@ -253,7 +234,6 @@ addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyP' || e.code === 'Escape') { if (state === 'play') pauseGame(); else if (state === 'pause') resumeGame(); e.preventDefault(); }
   else if (e.code === 'KeyM') { audioInit(); setMuted(!muted); }
-  else if (e.code === 'KeyN') { audioInit(); Music.next(); }
   else if (e.code === 'KeyC') cycleCamera();
   else if (e.code === 'Enter' && ((state === 'menu' && !screens.menu.hidden) || (state === 'over' && overTimer > 1)) && document.activeElement === document.body) {
     if (state === 'menu') openGarage('solo'); else startRace();
