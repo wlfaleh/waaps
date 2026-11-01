@@ -50,6 +50,16 @@ function renderOpenRooms() {
   box2.hidden = open.length === 0;
 }
 let iAmHost = false;
+let duelKm = DUEL_KMS.includes(+store('waforspeed-km')) ? +store('waforspeed-km') : 4;
+FINISH = duelKm * KM;
+function setDuelKm(k, fromHost) {
+  if (!DUEL_KMS.includes(k) || myStatus === 'race') return;
+  if (sub && !iAmHost && !fromHost) return;
+  duelKm = k; FINISH = k * KM;
+  if (!fromHost) store('waforspeed-km', String(k));
+  if (sub && iAmHost) sub.presence({ km: k }).catch(() => {});
+  if (!screens.lobby.hidden) renderLobby();
+}
 async function joinRoom(code, host = false) {
   if (!room) return;
   setNick();
@@ -60,7 +70,7 @@ async function joinRoom(code, host = false) {
     sub = null; lobbyNote('Impossible de rejoindre ce salon pour le moment. Réessaie dans quelques secondes.', true); return;
   }
   roomCode = code; round = 0; myStatus = 'lobby'; ghosts.clear(); iAmHost = host;
-  sub.presence({ n: nick, st: 'lobby', r: 0, d: 0, x: 0, v: 0, ft: null, car: myCar.id, paint: myPaint().id, host: host || null, map: host ? MAP.id : null, tod: host ? TOD : null }).catch(() => {});
+  sub.presence({ n: nick, st: 'lobby', r: 0, d: 0, x: 0, v: 0, ft: null, car: myCar.id, paint: myPaint().id, host: host || null, map: host ? MAP.id : null, tod: host ? TOD : null, km: host ? duelKm : null }).catch(() => {});
   sub.onPeers(onRoomPeers, () => { lobbyNote('La connexion au salon a été perdue.', true); leaveRoom(); renderLobby(); });
   renderLobby(); renderOpenRooms(); advertise();
 }
@@ -74,7 +84,8 @@ function hostPeer() { return others().find((p) => pres(p, 'host') === true); }
 function followHostMap() {
   if (!sub || iAmHost) return;
   const h = hostPeer(); if (!h) return;
-  const id = pres(h, 'map'), tod = pres(h, 'tod');
+  const id = pres(h, 'map'), tod = pres(h, 'tod'), km = pres(h, 'km');
+  if (DUEL_KMS.includes(km) && km !== duelKm && state !== 'play' && state !== 'count') setDuelKm(km, true);
   if (typeof id !== 'string' || !MAPS.some((m) => m.id === id)) return;
   if ((id !== MAP.id || tod !== TOD) && (state === 'menu' || state === 'over')) {
     if (setMap(id, tod)) { const wasOver = state === 'over'; resetRace('menu', 7); if (wasOver) state = 'over'; }
@@ -191,6 +202,12 @@ function renderLobby() {
   $('#lobbyMapBtn').hidden = !!sub && !iAmHost;
   const hp = sub && !iAmHost ? hostPeer() : null;
   $('#lobbyMapNote').textContent = sub && !iAmHost ? (hp ? 'choisi par ' + peerName(hp) : '') : '';
+  const kr = $('#kmRow');
+  if (!kr.children.length) for (const k of DUEL_KMS) {
+    const b = document.createElement('button'); b.className = 'km-btn'; b.dataset.km = k; b.textContent = k + ' km';
+    b.addEventListener('click', () => setDuelKm(k)); kr.appendChild(b);
+  }
+  for (const b of kr.children) { b.setAttribute('aria-pressed', String(+b.dataset.km === duelKm)); b.disabled = !!sub && !iAmHost; }
   if (!inRoom) {
     if (roomState === 'pending') lobbyNote('Connexion au serveur de jeu…');
     else if (!can) lobbyNote('Le duel marche quand la page est ouverte sur claude.ai par des personnes connectées qui ont accès au lien. Ici, seule la course solo est disponible.', true);
@@ -218,7 +235,7 @@ function renderLobby() {
   $('#roomNote').textContent = !os.length
     ? `Donne le code ${roomCode.toUpperCase()} à ton adversaire : il ouvre cette page, clique sur Duel en ligne et rejoint ton salon.`
     : os.some((p) => pres(p, 'st') === 'race') ? 'Une course est en cours dans ce salon. Tu partiras avec les autres à la prochaine manche.'
-    : 'Course de 4 km avec le même trafic pour tous. Le départ est lancé quand tout le monde est prêt.';
+    : `Course de ${duelKm} km avec le même trafic au départ. Le départ est lancé quand tout le monde est prêt.`;
   const rb = $('#readyBtn');
   rb.textContent = myStatus === 'ready' ? 'Annuler' : 'Prêt';
   rb.classList.toggle('btn--ghost', myStatus === 'ready');

@@ -17,6 +17,8 @@ const REV_MAX = -MAX_SPEED * 0.12, REV_ACC = MAX_SPEED * 0.1;   // marche arriè
 const NEAR_MISS = 0.24;   // marge latérale (en demi-route) d'un quasi-contact
 const CHECK_DIST = 100000;
 const LANE_X = [-2 / 3, 0, 2 / 3];
-const KM = 1000 / 0.006, FINISH = 4 * KM;
+const KM = 1000 / 0.006;
+const DUEL_KMS = [2, 4, 6, 10];   // distances proposées pour un duel
+let FINISH = 4 * KM;             // ligne d'arrivée du duel (choisie par le créateur du salon)
 /* Rendu 3D : 1 unité de jeu = 6 mm */
 const M = 0.006, SEG_M = SEG * M, RW = 7.5, CURVE_K = 0.003, ELEV = 0.5, CH = 32;
