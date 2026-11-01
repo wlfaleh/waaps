@@ -39,6 +39,20 @@ Les scripts sont chargés dans l'ordre de `index.html` et partagent leurs décla
 | `js/main.js` | Démarrage et boucle principale |
 | `models/` | Vrais modèles 3D des voitures (voir `models/README.md`) |
 
+## Principes 3D appliqués
+
+Inspirés du skill « 3d-games » (davila7/claude-code-templates) :
+
+| Principe | Dans le jeu |
+|---|---|
+| Regrouper les appels de dessin | Décor fusionné par tronçon de route (`buildChunk`) ; voiture lointaine en une seule pièce (`makeCarLow`) |
+| Niveau de détail selon la distance (LOD) | Trafic : voiture complète à moins de 70 m, simplifiée au-delà ; décor : petits objets (clôtures, parasols, pneus…) omis au-delà de 200 m, reconstruits en détail quand on s'approche |
+| Pas d'ombres en temps réel sur mobile | Ombres du soleil sur ordinateur uniquement ; ombres simulées (tache sombre) sous les voitures partout |
+| Collisions simples, visuels complexes | Chocs calculés sur des boîtes (longueur × largeur), modèles 3D détaillés |
+| Lumières « cuites » quand c'est possible | Halos des lampadaires et reflets des néons peints sur la route ; 4 lumières dynamiques seulement |
+| Caméra agréable | Suivi lissé, regard porté devant, champ de vision qui s'élargit avec la vitesse, jamais sous la route ; 3 vues |
+| Donner l'illusion du détail | Textures de relief, reflets en temps réel, flou des jantes à grande vitesse |
+
 ## Ajouter un terrain
 
 1. Ajoute une entrée dans `MAPS` (`js/world/maps.js`) : graine du tracé, virages, collines, trafic, couleurs de la vignette.

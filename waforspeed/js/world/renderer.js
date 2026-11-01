@@ -379,7 +379,8 @@ function applyEnv() {
   skyline.material.map = sk; skyline.material.needsUpdate = true;
   hemi.color.set(E.hemiSky); hemi.groundColor.set(E.hemiGround); hemi.intensity = E.hemiI;
   sunLight.color.set(E.sunColor); sunLight.intensity = E.sunI;
-  const shadows = quality === 'high' && E.sunDisc;
+  // ombres en temps réel coûteuses : réservées à l'ordinateur ; sur mobile, ombre simulée sous chaque voiture
+  const shadows = quality === 'high' && E.sunDisc && !isTouch;
   sunLight.castShadow = shadows;
   if (shadows) {
     const s = sunLight.shadow, sz = isTouch ? 1024 : 2048;
@@ -447,7 +448,10 @@ function worldUV(geo) {
   }
   geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
-function buildChunk(ci) {
+const SMALL_DECOR = new Set(['fence', 'bales', 'umbrella', 'tires', 'pole', 'marshal', 'tower', 'streettree']);
+const chunkLod = new Map();
+const LOD_FAR_M = 200;   // au-delà, les petits décors ne sont pas dessinés
+function buildChunk(ci, lod = 0) {
   const a0 = ci * CH, a1 = a0 + CH;
   const road = newBuf(), side = newBuf(), bld = newBuf(), neon = newBuf(), pool = newBuf(), walk = newBuf();
   const group = new THREE.Group();
@@ -473,7 +477,7 @@ function buildChunk(ci) {
     }
     const deco = segAt(a).deco;
     if (!deco) continue;
-    for (const it of deco.items) { const fn = DECOR[it.t]; if (fn) fn(ctx, it, p0, a); }
+    for (const it of deco.items) { if (lod && SMALL_DECOR.has(it.t)) continue; const fn = DECOR[it.t]; if (fn) fn(ctx, it, p0, a); }
   }
   const add = (B, mat, uv, cast, recv) => {
     if (!B.p.length) return null;
@@ -496,7 +500,7 @@ let boardGeo = null;
 function disposeChunk(ci) {
   const g = chunks.get(ci); if (!g) return;
   g.children.forEach((m) => { if (m.geometry !== boardGeo && m.geometry !== adGeo) m.geometry.dispose(); });
-  scene.remove(g); chunks.delete(ci);
+  scene.remove(g); chunks.delete(ci); chunkLod.delete(ci);
 }
 function ensureChunks(sAbs, all) {
   const aP = Math.floor(sAbs / SEG);
@@ -504,8 +508,12 @@ function ensureChunks(sAbs, all) {
   for (const ci of [...chunks.keys()]) if (ci < c0 || ci > c1) disposeChunk(ci);
   let built = 0;
   for (let ci = c0; ci <= c1; ci++) {
-    if (chunks.has(ci)) continue;
-    buildChunk(ci);
+    const lod = (ci * CH - aP) * SEG_M > LOD_FAR_M ? 1 : 0;
+    if (chunks.has(ci)) {
+      if (chunkLod.get(ci) <= lod) continue;
+      disposeChunk(ci);               // le tronçon se rapproche : on le reconstruit en détail
+    }
+    buildChunk(ci, lod); chunkLod.set(ci, lod);
     if (!all && ++built >= 2) break;
   }
   trimPoses(aP);
