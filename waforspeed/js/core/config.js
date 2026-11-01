@@ -11,6 +11,8 @@ const SEG = 200, RUMBLE = 3, LANES = 3;
 const PLAYER_Z = 0;
 const MAX_SPEED = SEG * 60;
 const ACCEL = MAX_SPEED / 5, BRAKE = -MAX_SPEED, DECEL = -MAX_SPEED / 5;
+/* physique réaliste (en m/s et m/s²) : freinage, frottements, adhérence, braquage */
+const PHYS = { brake: 12.5, roll: 0.35, drag: 0.00042, engineBrake: 0.9, grip: 18, maxSteer: 0.6, steerV: 14, steerIn: 4, steerOut: 6, align: 3, maxHeading: 0.5, offRoad: 7 };
 const OFF_DECEL = -MAX_SPEED / 2, OFF_LIMIT = MAX_SPEED / 4;
 const CENTRIFUGAL = 0.2;
 const REV_MAX = -MAX_SPEED * 0.12, REV_ACC = MAX_SPEED * 0.1;   // marche arrière : ~30 km/h

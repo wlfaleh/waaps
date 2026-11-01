@@ -1,0 +1,11 @@
+Model Information:
+* title:	Alfa Romeo Giulia Quadrifoglio
+* source:	https://sketchfab.com/3d-models/alfa-romeo-giulia-quadrifoglio-7a5e219a35ed49e99b91fb1a085d8528
+* author:	ijiklvn (https://sketchfab.com/kelvin-carvalho)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+This work is based on "Alfa Romeo Giulia Quadrifoglio" (https://sketchfab.com/3d-models/alfa-romeo-giulia-quadrifoglio-7a5e219a35ed49e99b91fb1a085d8528) by ijiklvn (https://sketchfab.com/kelvin-carvalho) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Modifications for WaForSpeed: geometry simplified, textures resized to 1024 px (WebP), files embedded into a single glTF JSON.

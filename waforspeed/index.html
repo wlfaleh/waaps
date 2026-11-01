@@ -69,45 +69,59 @@
 
 <section class="screen" id="menu" aria-labelledby="logo">
   <div class="screen-inner">
-    <p class="eyebrow">Sprint urbain · nuit · pluie</p>
+    <p class="eyebrow">Sprint urbain · 10 vraies voitures</p>
     <h1 class="logo" id="logo"><span>Wa<em>for</em></span><span class="speed">Speed</span></h1>
-    <p class="intro">Traverse la ville avant la fin du chrono. Frôle le trafic pour remplir ta nitro et enchaîner les combos, passe les checkpoints pour gagner du temps.</p>
-    <div class="actions">
-      <button class="btn" id="startBtn">Course solo</button>
-      <button class="btn btn--ghost" id="duelBtn">Duel en ligne</button>
-      <button class="btn btn--ghost" id="garageBtn">Garage</button>
-      <button class="btn btn--ghost" id="qualityBtn">Graphismes : haute</button>
+    <nav class="menu-list" aria-label="Menu principal">
+      <button class="mitem" id="startBtn"><span class="mi-t">Course solo</span><span class="mi-d">Bats le chrono, frôle le trafic, enchaîne les checkpoints</span></button>
+      <button class="mitem" id="duelBtn"><span class="mi-t">Duel en ligne</span><span class="mi-d">Défie un ami sur la même route, même trafic</span></button>
+      <button class="mitem" id="garageBtn"><span class="mi-t">Showroom</span><span class="mi-d">Choisis ta voiture et sa couleur</span></button>
+      <button class="mitem mitem--small" id="qualityBtn"><span class="mi-t">Graphismes : haute</span></button>
+    </nav>
+    <div class="menu-foot">
+      <div class="record"><span class="label">Record</span><strong id="best">—</strong></div>
+      <button class="mycar" id="myCarBtn" aria-label="Changer de voiture"><span class="label">Ta voiture</span><strong id="myCarName">—</strong></button>
     </div>
-    <div class="record"><span class="label">Record</span><strong id="best">—</strong></div>
-    <ul class="keys only-desk">
-      <li><kbd>↑</kbd><kbd>Z</kbd><span>Accélérer</span></li>
-      <li><kbd>↓</kbd><kbd>S</kbd><span>Freiner · maintenu à l'arrêt : marche arrière</span></li>
-      <li><kbd>←</kbd><kbd>→</kbd><kbd>Q</kbd><kbd>D</kbd><span>Diriger</span></li>
-      <li><kbd>Espace</kbd><span>Nitro</span></li>
-      <li><kbd>P</kbd><span>Pause</span></li>
-      <li><kbd>M</kbd><span>Couper le son</span></li>
-      <li><kbd>N</kbd><span>Morceau suivant</span></li>
-      <li><kbd>C</kbd><span>Caméra</span></li>
-    </ul>
-    <p class="intro only-touch">Dirige avec les flèches à gauche. À droite : appuie sur Gaz pour accélérer, Frein pour ralentir (maintenu à l'arrêt, la voiture recule), Nitro pour le turbo.</p>
+    <details class="help only-desk">
+      <summary>Commandes</summary>
+      <ul class="keys">
+        <li><kbd>↑</kbd><kbd>Z</kbd><span>Accélérer</span></li>
+        <li><kbd>↓</kbd><kbd>S</kbd><span>Freiner · à l'arrêt : marche arrière</span></li>
+        <li><kbd>←</kbd><kbd>→</kbd><kbd>Q</kbd><kbd>D</kbd><span>Tourner le volant</span></li>
+        <li><kbd>Espace</kbd><span>Nitro</span></li>
+        <li><kbd>C</kbd><span>Caméra</span></li>
+        <li><kbd>P</kbd><span>Pause</span></li>
+        <li><kbd>M</kbd><span>Son</span></li>
+        <li><kbd>N</kbd><span>Morceau suivant</span></li>
+      </ul>
+    </details>
+    <p class="intro only-touch">Flèches à gauche : volant. À droite : Gaz, Frein (à l'arrêt : marche arrière), Nitro.</p>
   </div>
 </section>
 
-<section class="screen screen--garage" id="garage" hidden aria-labelledby="carName">
-  <div class="screen-inner">
-    <p class="eyebrow">Garage · choisis ta voiture</p>
-    <h2 class="big" id="carName">Golf GTI</h2>
-    <p class="intro" id="carTag"></p>
-    <p class="note" id="carModelNote"></p>
+<section class="screen screen--show" id="garage" hidden aria-labelledby="carName">
+  <header class="show-head">
+    <p class="eyebrow"><span id="carBrand">Volkswagen</span> · <span id="carIndex">01 / 10</span></p>
+    <h2 class="show-name" id="carName">Golf 8 GTI</h2>
+    <p class="show-body"><span class="chip" id="carBody">Compacte</span><span class="show-tag" id="carTag"></span></p>
+    <div class="car-dots" id="carGrid" role="group" aria-label="Voitures"></div>
+  </header>
+  <button class="show-arrow show-arrow--prev" id="carPrev" aria-label="Voiture précédente"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 7 12l8 8"/></svg></button>
+  <button class="show-arrow show-arrow--next" id="carNext" aria-label="Voiture suivante"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 8 8-8 8"/></svg></button>
+  <p class="show-loading" id="carLoading" hidden><span class="spin" aria-hidden="true"></span>Chargement du modèle 3D…</p>
+  <div class="show-panel">
+    <dl class="specs" id="carSpecs">
+      <div><dt>Puissance</dt><dd><b id="spCh">—</b><small>ch</small></dd></div>
+      <div><dt>0 à 100</dt><dd><b id="spS100">—</b><small>s</small></dd></div>
+      <div><dt>Vitesse max</dt><dd><b id="spVmax">—</b><small>km/h</small></dd></div>
+    </dl>
     <div class="statlist" id="carStats"></div>
     <div class="paint-line"><span class="label">Couleur</span><div class="paint-row" id="paintRow" role="group" aria-label="Couleur"></div><span class="paint-name" id="paintName"></span></div>
-    <div class="car-grid" id="carGrid" role="group" aria-label="Voitures"></div>
     <div class="actions">
-      <button class="btn" id="garageGo">Rouler</button>
+      <button class="btn" id="garageGo">Choisir</button>
       <button class="btn btn--ghost" id="garageBack">Retour</button>
     </div>
   </div>
-  <p class="garage-hint">Glisse pour faire tourner · ← → pour changer</p>
+  <p class="note show-credit" id="carModelNote"></p>
 </section>
 
 <div class="radio" id="radio">

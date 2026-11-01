@@ -48,16 +48,25 @@ function pauseGame() { if (state !== 'play' || mode !== 'solo') return; state = 
 function resumeGame() { if (state !== 'pause') return; state = 'play'; for (const k in input) input[k] = false; show(null); lastT = performance.now(); }
 function toMenu() {
   raceStartWall = 0; leaveRoom(); mode = 'solo'; showCount(null); state = 'menu'; resetRace('menu', 7); show('menu');
-  $('#best').textContent = best ? best.toLocaleString('fr-FR') : '—'; $('#startBtn').focus({ preventScroll: true });
+  $('#best').textContent = best ? best.toLocaleString('fr-FR') : '—'; $('#myCarName').textContent = myCar.name; $('#startBtn').focus({ preventScroll: true });
 }
 
 /* ---------- Garage ---------- */
 let garageFor = 'solo';
 function renderGarageUI() {
-  $('#carName').textContent = myCar.name;
+  const i = CARS.indexOf(myCar), st = carStats(myCar), sp = myCar.spec;
+  $('#carBrand').textContent = myCar.brand;
+  $('#carIndex').textContent = String(i + 1).padStart(2, '0') + ' / ' + CARS.length;
+  $('#carName').textContent = myCar.model;
+  $('#carBody').textContent = myCar.body;
   $('#carTag').textContent = myCar.tag;
-  $('#carModelNote').textContent = modelNote(myCar);
-  const labels = [['v', 'Vitesse'], ['a', 'Accélération'], ['m', 'Maniabilité'], ['n', 'Nitro']];
+  $('#spCh').textContent = String(sp.ch);
+  $('#spS100').textContent = sp.s100.toLocaleString('fr-FR');
+  $('#spVmax').textContent = String(sp.vmax);
+  const st2 = modelStatus.get(myCar.id);
+  $('#carModelNote').textContent = st2 === 'ok' ? modelNote(myCar) : '';
+  $('#carLoading').hidden = st2 === 'ok' || st2 === 'error' || !CAR_MODELS[myCar.id];
+  const labels = [['v', 'Vitesse'], ['a', 'Accélération'], ['m', 'Maniabilité'], ['p', 'Puissance']];
   const box2 = $('#carStats');
   if (!box2.children.length) {
     for (const [k, lab] of labels) {
@@ -67,26 +76,20 @@ function renderGarageUI() {
     }
   }
   for (const row of box2.children) {
-    const v = myCar.stats[row.dataset.k];
+    const v = st[row.dataset.k] || 0;
     row.children[1].firstChild.style.width = v * 10 + '%';
     row.children[2].textContent = String(v);
   }
-  const grid = $('#carGrid');
-  if (!grid.children.length) {
+  const dots = $('#carGrid');
+  if (!dots.children.length) {
     for (const c of CARS) {
-      const b = document.createElement('button'); b.className = 'car-card'; b.dataset.id = c.id;
-      const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = paintById(c.paint).hex;
-      const nm = document.createElement('span'); nm.textContent = c.name;
-      b.append(sw, nm);
+      const b = document.createElement('button'); b.dataset.id = c.id;
+      b.setAttribute('aria-label', c.name); b.title = c.name;
       b.addEventListener('click', () => selectCar(c.id));
-      grid.appendChild(b);
+      dots.appendChild(b);
     }
   }
-  for (const b of grid.children) {
-    const c = carById(b.dataset.id);
-    b.setAttribute('aria-pressed', String(c === myCar));
-    b.firstChild.style.background = paintById(store('waforspeed-paint-' + c.id) || c.paint).hex;
-  }
+  for (const b of dots.children) b.setAttribute('aria-pressed', String(b.dataset.id === myCar.id));
   const pr = $('#paintRow');
   if (!pr.children.length) {
     for (const p of PAINTS) {
@@ -98,18 +101,30 @@ function renderGarageUI() {
   }
   for (const b of pr.children) b.setAttribute('aria-pressed', String(b.dataset.id === myPaint().id));
   $('#paintName').textContent = myPaint().name;
-  $('#garageGo').textContent = garageFor === 'solo' ? 'Suivant' : 'Valider';
+  const go = $('#garageGo'), ready = st2 === 'ok' || st2 === 'error';
+  go.disabled = !ready;
+  go.textContent = !ready ? 'Chargement…' : garageFor === 'duel' ? 'Valider' : 'Choisir';
   $('#lobbyCar').textContent = myCar.name;
+  $('#myCarName').textContent = myCar.name;
 }
+/* voiture suivante / précédente (flèches, clavier, glisser) */
+function cycleCar(dir) {
+  const i = CARS.indexOf(myCar) + dir;
+  selectCar(CARS[(i + CARS.length) % CARS.length].id, dir);
+}
+$('#carPrev').addEventListener('click', () => cycleCar(-1));
+$('#carNext').addEventListener('click', () => cycleCar(1));
+$('#myCarBtn').addEventListener('click', () => openGarage('look'));
 function selectPaint(id) {
   store('waforspeed-paint-' + myCar.id, id);
   if (renderer) { setGarageCar(); buildPlayer(); }
   renderGarageUI();
   if (sub) sub.presence({ paint: myPaint().id }).catch(() => {});
 }
-function selectCar(id) {
+function selectCar(id, dir) {
+  const prev = myCar;
   myCar = carById(id); PERF = carPerf(myCar); store('waforspeed-car', myCar.id);
-  if (renderer) { setGarageCar(); buildPlayer(); }
+  if (renderer) { setGarageCar(dir || (CARS.indexOf(myCar) > CARS.indexOf(prev) ? 1 : -1)); buildPlayer(); }
   renderGarageUI();
   if (sub) sub.presence({ car: myCar.id, paint: myPaint().id }).catch(() => {});
   noiseHit(0.18, 1400, 1.5, 0.25, 500);
@@ -121,8 +136,7 @@ function openGarage(forWhat) {
   if (renderer) setGarageCar();
   renderGarageUI();
   show('garage');
-  const cur = [...$('#carGrid').children].find((b) => b.dataset.id === myCar.id);
-  if (cur) cur.focus({ preventScroll: true });
+  $('#garageGo').focus({ preventScroll: true });
 }
 function leaveGarage(go) {
   if (garageFor === 'solo' && go) { openMapSel('solo'); return; }
@@ -189,7 +203,7 @@ $('#againBtn').addEventListener('click', startRace);
 $('#menuBtn').addEventListener('click', toMenu);
 $('#resumeBtn').addEventListener('click', resumeGame);
 $('#quitBtn').addEventListener('click', toMenu);
-function setQualityLabel() { $('#qualityBtn').textContent = 'Graphismes : ' + (quality === 'high' ? 'haute' : 'rapide'); }
+function setQualityLabel() { $('#qualityBtn').firstChild.textContent = 'Graphismes : ' + (quality === 'high' ? 'haute' : 'rapide'); }
 $('#qualityBtn').addEventListener('click', () => {
   setQuality(quality === 'high' ? 'low' : 'high', true);
 });
@@ -234,9 +248,7 @@ addEventListener('keydown', (e) => {
   if ((state === 'play' || state === 'count') && k) { input[k] = true; e.preventDefault(); return; }
   if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'range') return;
   if (state === 'garage' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
-    const i = CARS.indexOf(myCar) + (e.code === 'ArrowRight' ? 1 : -1);
-    selectCar(CARS[(i + CARS.length) % CARS.length].id);
-    const cur = [...$('#carGrid').children].find((b) => b.dataset.id === myCar.id); if (cur) cur.focus({ preventScroll: true });
+    cycleCar(e.code === 'ArrowRight' ? 1 : -1);
     e.preventDefault(); return;
   }
   if (e.code === 'KeyP' || e.code === 'Escape') { if (state === 'play') pauseGame(); else if (state === 'pause') resumeGame(); e.preventDefault(); }

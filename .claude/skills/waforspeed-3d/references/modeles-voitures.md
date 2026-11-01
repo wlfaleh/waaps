@@ -64,6 +64,13 @@ x1: { file: 'models/bmw-x5/bmw-x5.json', rotateY: 180, paint: '^CARPAINT$', cred
 - feux et phares repérés par matériau, uniquement si toutes les pièces du matériau sont des feux (sinon un plastique partagé s'allume partout) ;
 - chargement en file : voiture du joueur d'abord (`requestModel`).
 
+## Pièges rencontrés
+- **Boîte englobante fausse** : `Box3.setFromObject` de three r128 transforme la boîte locale de chaque pièce ; pour une pièce tournée (Porsche, Abarth) elle est 2 à 3 fois trop grande → voiture qui flotte et trop petite. Toujours utiliser `preciseBox()` (sommet par sommet) de `models.js`.
+- **Pièces à squelette** (`SkinnedMesh`, ex. soufflet de levier de vitesse) : mal placées hors animation, supprimées au chargement et par `convert.mjs`.
+- **Plans d'ombre** plats sous la voiture : supprimés (sinon ils fixent la longueur et le sol).
+- **Roues fusionnées avec d'autres pièces** (Jeep) : découpe par coin puis on ne garde que les triangles autour du centre de la roue.
+- **Peinture** : chaque modèle a ses réglages (mat, brillant…) ; la peinture repeinte est uniformisée (vernis métallisé) pour un rendu cohérent.
+
 ## 7. Vérifier en jeu
 Captures garage (avant, profil, arrière) + course vue de derrière ; `realBody(car).wheels.length === 4` ; aucune pièce blanche lumineuse ; aucune erreur console. Voir `tests.md`.
 

@@ -99,7 +99,7 @@ function updateCamera(dt, sP) {
   const car = playerMesh.position;
   // la caméra suit en partie l'orientation de la voiture : dans les virages on voit son flanc
   // pendant un tête-à-queue la caméra ne suit qu'un peu la rotation (elle reste derrière la route)
-  const hd = tmpA.th + playerYaw * (C.hood ? 1 : 0.6) + spinYaw * (C.hood ? 1 : 0.2);
+  const hd = tmpA.th + playerYaw * (C.hood ? 1 : 0.45) + spinYaw * (C.hood ? 1 : 0.2);
   const fx = Math.sin(hd), fz = -Math.cos(hd), rx = Math.cos(hd), rz = Math.sin(hd);
   let desired, look;
   if (C.hood) {
@@ -140,17 +140,18 @@ function render3D(dt, t) {
   ensureChunks(sP, false);
   // joueur
   const sp = speed / MAX_SPEED;
-  // la voiture pointe là où elle va : vitesse latérale comparée à la vitesse d'avance
-  const dX = playerX - prevPlayerX; prevPlayerX = playerX;
-  const latVel = Math.abs(dX) > 0.3 ? 0 : dX * RW / Math.max(dt, 1e-3);
-  const targetYaw = clamp(Math.atan2(latVel, Math.max(speed * M, 3)), -0.42, 0.42) + steer * 0.04 * Math.min(1, sp * 2);
-  playerYaw += (targetYaw - playerYaw) * Math.min(1, dt * 9);
+  // la voiture pointe là où elle va : son cap (heading) vient directement de la physique
+  playerYaw += (heading - playerYaw) * Math.min(1, dt * 20);
   placeOnTrack(playerMesh, sP, playerX, playerYaw + spinYaw);
   const inner = playerMesh.userData.inner;
-  inner.rotation.z = steer * 0.045 * Math.min(1, sp + 0.15);
-  playerMesh.userData.animWheels(steer * (0.55 - 0.3 * Math.min(sp, 1)), speed * M * dt);
-  inner.rotation.x = reduceMotion ? 0 : (braking ? -0.012 : 0) + Math.sin(t * 0.03) * 0.002 * sp;
-  inner.position.y = reduceMotion ? 0 : Math.sin(t * 0.045) * 0.008 * sp;
+  // roulis vers l'extérieur du virage, tangage à l'accélération et au freinage (suspension)
+  const rollT = reduceMotion ? 0 : clamp(latAcc * 0.0045, -0.06, 0.06);
+  const pitchT = reduceMotion ? 0 : clamp(lonAcc * 0.0028, -0.035, 0.03);
+  inner.rotation.z += (rollT - inner.rotation.z) * Math.min(1, dt * 7);
+  inner.rotation.x += (pitchT - inner.rotation.x) * Math.min(1, dt * 6);
+  const wa = steer * 0.6 / (1 + Math.abs(speed * M) / 14);
+  playerMesh.userData.animWheels(clamp(wa * 1.6, -0.6, 0.6), speed * M * dt * Math.cos(heading));
+  inner.position.y = reduceMotion ? 0 : Math.sin(t * 0.045) * 0.006 * sp;
   playerMesh.userData.setBrake(braking || reversing);
   for (const fl of flames) { fl.visible = nitroOn; if (nitroOn) { const k = 0.7 + Math.random() * 0.6; fl.scale.set(1, 1, k); } }
   // trafic

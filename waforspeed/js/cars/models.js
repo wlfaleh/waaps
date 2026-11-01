@@ -71,18 +71,46 @@ function nextModel() {
   }).catch(fail);
 }
 
+/* Boîte englobante exacte (sommet par sommet). Box3.setFromObject de three r128 transforme la boîte
+   locale de chaque pièce : pour une pièce tournée elle est bien trop grande (voiture qui flotte, mauvaise taille). */
+const _pv = new THREE.Vector3();
+function preciseBox(obj) {
+  const box = new THREE.Box3();
+  obj.updateWorldMatrix(true, true);
+  obj.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const pos = o.geometry.attributes.position, idx = o.geometry.index;
+    if (!pos) return;
+    const n = idx ? idx.count : pos.count;
+    // seuls les sommets réellement dessinés comptent
+    for (let i = 0; i < n; i++) { _pv.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(o.matrixWorld); box.expandByPoint(_pv); }
+  });
+  return box;
+}
+
 /* Met le modèle à l'échelle (longueur réelle de la voiture), le pose au sol,
    l'oriente avant vers -Z et repère les matériaux de carrosserie et de feux. */
 function prepareModel(root, car, spec) {
   const wrap = new THREE.Group();
   wrap.add(root);
+  // nettoyage : pièces animées par squelette (mal placées hors animation) et plans d'ombre plats sous la voiture
+  root.updateMatrixWorld(true);
+  const junk = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.isSkinnedMesh) { junk.push(o); return; }
+    const b = preciseBox(o), sz = b.getSize(new THREE.Vector3());
+    const dims = [sz.x, sz.y, sz.z].sort((p, q) => p - q);
+    if (dims[2] > 1.5 && dims[0] < 0.002 * dims[2] && dims[1] > 0.4 * dims[2] && /plane|shadow|ombre|ground|floor/i.test(o.name + ' ' + (o.material.name || '') + ' Plane')) junk.push(o);
+  });
+  for (const o of junk) o.parent.remove(o);
   root.rotation.y = THREE.MathUtils.degToRad(spec.rotateY || 0);
   const v = new THREE.Vector3();
-  let box = new THREE.Box3().setFromObject(wrap);
+  let box = preciseBox(wrap);
   box.getSize(v);
-  if (spec.rotateY === undefined && v.x > v.z) { root.rotation.y += Math.PI / 2; box = new THREE.Box3().setFromObject(wrap); box.getSize(v); }
+  if (spec.rotateY === undefined && v.x > v.z) { root.rotation.y += Math.PI / 2; box = preciseBox(wrap); box.getSize(v); }
   root.scale.multiplyScalar(car.d.L / Math.max(v.z, 0.001));
-  box = new THREE.Box3().setFromObject(wrap);
+  box = preciseBox(wrap);
   const c = box.getCenter(new THREE.Vector3());
   root.position.x -= c.x; root.position.z -= c.z; root.position.y -= box.min.y;
   splitWheels(wrap, car, spec);
@@ -116,7 +144,12 @@ function prepareModel(root, car, spec) {
 const repaintCache = new Map();
 function repaintMat(m, hex) {
   const key = m.uuid + hex;
-  if (!repaintCache.has(key)) { const c = m.clone(); c.color.set(hex); repaintCache.set(key, c); if (c.envMap) envMats.add(c); }
+  if (!repaintCache.has(key)) {
+    // même peinture pour toutes les voitures : vernis métallisé (les modèles d'origine ont des réglages très différents)
+    const c = m.clone(); c.color.set(hex);
+    if (c.isMeshStandardMaterial) { c.metalness = 0.45; c.roughness = 0.32; c.metalnessMap = null; c.roughnessMap = null; c.envMapIntensity = 0.9; c.emissive && c.emissive.set(0); c.needsUpdate = true; }
+    repaintCache.set(key, c); if (c.envMap) envMats.add(c);
+  }
   return repaintCache.get(key);
 }
 /* Le trafic n'utilise les vrais modèles qu'en graphismes « haute » et s'ils sont assez légers. */
@@ -180,18 +213,36 @@ function splitWheels(wrap, car, spec) {
     const name = (o.name || '') + ' ' + (o.parent ? o.parent.name || '' : '') + ' ' + (o.material.name || '');
     if (/calip|callip|brake|etrier/i.test(name)) continue;
     const named = rx.test(name);
-    const bb = new THREE.Box3().setFromObject(o), sz = bb.getSize(new THREE.Vector3());
+    const bb = preciseBox(o), sz = bb.getSize(new THREE.Vector3());
     if (bb.min.y > 0.12 || bb.max.y > car.d.rw * 2.8) continue;       // pas posé au sol, ou trop haut
     if (sz.x < 1.0 && sz.z < 1.0) { if (!named && looksLikeWheel(bb, sz, car)) o.userData.wfsWheel = true; continue; }   // déjà une seule roue
     const g = o.geometry, pos = g.attributes.position, nt = (g.index ? g.index.count : pos.count) / 3;
-    const parts = { LF: [], RF: [], LB: [], RB: [] };
+    const parts = { LF: [], RF: [], LB: [], RB: [] }, cen = [];
     for (let t = 0; t < nt; t++) {
       const v = (k) => (g.index ? g.index.getX(t * 3 + k) : t * 3 + k);
       p.fromBufferAttribute(pos, v(0)).applyMatrix4(o.matrixWorld);
       q.fromBufferAttribute(pos, v(1)).applyMatrix4(o.matrixWorld);
       r.fromBufferAttribute(pos, v(2)).applyMatrix4(o.matrixWorld);
-      const cx = p.x + q.x + r.x, cz = p.z + q.z + r.z;
+      const cx = (p.x + q.x + r.x) / 3, cy = (p.y + q.y + r.y) / 3, cz = (p.z + q.z + r.z) / 3;
+      cen.push(cy, cz, cx);
       parts[(cx > 0 ? 'R' : 'L') + (cz < 0 ? 'F' : 'B')].push(t);
+    }
+    // dans chaque coin, on ne garde que ce qui entoure le centre de la roue (médiane) ; le reste ne tourne pas
+    const rest = [];
+    for (const k in parts) {
+      const list = parts[k]; if (!list.length) continue;
+      // rayon de roue ≈ moitié de la hauteur de la pièce (posée au sol) ; deux passes pour recentrer
+      const R = Math.min(bb.max.y, car.d.rw * 2.4) * 0.52, my = R;
+      const med = (arr, j) => { const a = arr.map((t) => cen[t * 3 + j]).sort((x, y) => x - y); return a[a.length >> 1]; };
+      let sel = list;
+      for (let pass = 0; pass < 2; pass++) {
+        const mz = med(sel, 1), mx = med(sel, 2);
+        sel = list.filter((t) => Math.abs(cen[t * 3] - my) < R && Math.abs(cen[t * 3 + 1] - mz) < R && Math.abs(cen[t * 3 + 2] - mx) < 0.25);
+        if (!sel.length) break;
+      }
+      const keep = new Set(sel);
+      for (const t of list) if (!keep.has(t)) rest.push(t);
+      parts[k] = sel;
     }
     const keys = Object.keys(parts).filter((k) => parts[k].length);
     if (keys.length < 4) continue;
@@ -199,11 +250,12 @@ function splitWheels(wrap, car, spec) {
     // chaque morceau doit avoir la taille d'une roue
     const ok = subs.every((m) => {
       m.matrix.copy(o.matrixWorld); m.matrix.decompose(m.position, m.quaternion, m.scale); m.updateMatrixWorld(true);
-      const b = new THREE.Box3().setFromObject(m), s2 = b.getSize(new THREE.Vector3());
+      const b = preciseBox(m), s2 = b.getSize(new THREE.Vector3());
       return s2.z < 1.0 && s2.y < 1.0 && s2.x < 0.6 && (named || looksLikeWheel(b, s2, car));
     });
     if (!ok) continue;
     for (const m of subs) { m.userData.wfsWheel = true; m.castShadow = o.castShadow; wrap.add(m); }
+    if (rest.length) { const m = new THREE.Mesh(subGeometry(g, rest), o.material); m.name = (o.name || '') + '_fixe'; m.matrix.copy(o.matrixWorld); m.matrix.decompose(m.position, m.quaternion, m.scale); wrap.add(m); }
     o.parent.remove(o);
   }
 }
@@ -222,7 +274,7 @@ function rigWheels(obj, car) {
     if (!o.isMesh) return;
     const name = (o.name || '') + ' ' + (o.parent ? o.parent.name || '' : '') + ' ' + (Array.isArray(o.material) ? '' : o.material.name || '');
     if (!(rx.test(name) || o.userData.wfsWheel) || /calip|callip|brake|etrier/i.test(name)) return;
-    const bb = new THREE.Box3().setFromObject(o), c = bb.getCenter(new THREE.Vector3()), sz = bb.getSize(new THREE.Vector3());
+    const bb = preciseBox(o), c = bb.getCenter(new THREE.Vector3()), sz = bb.getSize(new THREE.Vector3());
     // une pièce de roue est près du sol et pas plus grande qu'une roue
     if (c.y > car.d.rw * 1.8 || sz.y > 1.0 || sz.z > 1.0) return;
     const key = (c.x > 0 ? 'R' : 'L') + (c.z < 0 ? 'F' : 'B');
@@ -233,7 +285,7 @@ function rigWheels(obj, car) {
   let rw = car.d.rw;
   for (const [key, meshes] of groups) {
     const box = new THREE.Box3();
-    for (const m of meshes) box.expandByObject(m);
+    for (const m of meshes) box.union(preciseBox(m));
     const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
     if (sz.y > 1.3 || sz.y < 0.25) continue;
     rw = sz.y / 2;

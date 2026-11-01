@@ -61,7 +61,9 @@ Avant d'ajouter une bibliothèque : version exacte **r128** sur cdnjs/jsdelivr (
 - 3 vues (`CAM_MODES` : proche, loin, capot) ; `near`/`far` serrés (0.1 / brouillard + marge).
 
 ### 7. Physique et collisions (MOYEN)
-- Formes simples : boîtes/capsules sur la route (x latéral, z distance), jamais de collision au maillage.
+- Conduite (`update.js`, constantes `PHYS`) : volant progressif, cap de la voiture (`heading`) qui la fait avancer en biais, angle des roues réduit avec la vitesse, limite d'adhérence, réalignement doux sans volant, angle max serré à haute vitesse. Performances tirées de la vraie fiche (`spec` : ch, 0-100, vmax, kg).
+- Symétrie : même calcul à gauche et à droite (vérifié : écart nul), rebonds sur les bordures identiques des deux côtés.
+- Formes simples : rectangle orienté (longueur/largeur réelles tournées du cap) sur la route, jamais de collision au maillage. Masse réelle : la plus lourde gagne le choc.
 - Arcade et lisible avant tout : pas d'accélération sans la pédale Gaz, marche arrière bornée (`REV_MAX`), accidents = tête-à-queue + perte de vitesse puis remise dans l'axe.
 - Le trafic ne s'interpénètre jamais : contrôle de voie libre (`laneFree`) + clignotant avant changement de voie.
 
