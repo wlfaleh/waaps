@@ -22,6 +22,7 @@ function boot() {
       setupThree();
       shadowGeo = new THREE.PlaneGeometry(1, 1); shadowGeo.rotateX(-Math.PI / 2);
       glowGeo = shadowGeo;
+      blinkGeo = new THREE.BoxGeometry(1, 1, 1);
       boardGeo = new THREE.PlaneGeometry(8, 3.2);
       resetPoses();
       buildPlayer();

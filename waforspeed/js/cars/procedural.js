@@ -241,6 +241,9 @@ function makeCarMaterials() {
   MAT.head = new THREE.MeshBasicMaterial({ color: 0xfff3dc });
   MAT.tail = new THREE.MeshBasicMaterial({ color: 0xff4868 });
   MAT.plate = new THREE.MeshStandardMaterial({ color: 0xe8eaee, metalness: 0, roughness: 0.5 });
+  MAT.blinkOn = new THREE.MeshBasicMaterial({ color: 0xffa21a });
+  MAT.blinkOff = new THREE.MeshStandardMaterial({ color: 0x5a3a12, metalness: 0.2, roughness: 0.4 });
+  MAT.blinkHalo = new THREE.SpriteMaterial({ map: TEXS.radial, color: 0xff9a10, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
 }
 /* Carrosserie provisoire (sans ombre ni halo : makeCarMesh, dans models.js, les ajoute). */
 function proceduralBody(car, paintHex, opts = {}) {

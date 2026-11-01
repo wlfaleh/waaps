@@ -29,7 +29,7 @@ function addCars(n) {
     cars.push({
       type, color: Math.floor(R() * TRAFFIC_PAINTS.length), len, w: CARS[type].d.W / (2 * RW),
       lane, target: lane, offset: LANE_X[lane], prevOff: LANE_X[lane], z, speed: want, want,
-      rng: (R() * 4294967296) >>> 0, think: 1 + R() * 4, crash: null, prevDz: relZ(z - (position + PLAYER_Z)), mesh: null
+      rng: (R() * 4294967296) >>> 0, think: 1 + R() * 4, crash: null, signal: 0, pending: null, prevDz: relZ(z - (position + PLAYER_Z)), mesh: null
     });
   }
 }
@@ -57,7 +57,7 @@ function stepTraffic(h) {
       c.vx *= Math.max(0, 1 - 2.5 * h);
       c.yaw += c.spin * h; c.spin *= Math.max(0, 1 - 1.8 * h);
       if (c.t > 7 && Math.abs(relZ(position - car.z)) > 60 / M) {
-        car.crash = null; car.speed = 0;
+        car.crash = null; car.speed = 0; car.signal = 0; car.pending = null;
         let best = 0, bd = 9;
         for (let l = 0; l < LANES; l++) { const d = Math.abs(LANE_X[l] - car.offset); if (d < bd) { bd = d; best = l; } }
         car.lane = car.target = best;
@@ -92,20 +92,28 @@ function stepTraffic(h) {
     if (gap < 0.8 / M) car.speed = Math.min(car.speed, leadSpeed * 0.95);
     // envie de changer de file (bloqué derrière plus lent, ou de temps en temps)
     car.think -= h;
-    if (car.think <= 0 && car.target === car.lane) {
+    if (car.think <= 0 && car.target === car.lane && !car.pending) {
       const r = nextRand(car);
       car.think = 1.5 + r * 4;
       const blocked = gap < safe * 1.6 && leadSpeed < car.want * 0.85;
       if (blocked || r < 0.12) {
         const dir = nextRand(car) < 0.5 ? -1 : 1;
-        for (const nl of [car.lane + dir, car.lane - dir]) if (nl >= 0 && nl < LANES && laneFree(car, nl)) { car.target = nl; break; }
+        // d'abord le clignotant, le changement de file vient ~1 s plus tard
+        for (const nl of [car.lane + dir, car.lane - dir]) if (nl >= 0 && nl < LANES && laneFree(car, nl)) { car.pending = { lane: nl, t: 0.9 + nextRand(car) * 0.5 }; car.signal = Math.sign(nl - car.lane); break; }
+      }
+    }
+    if (car.pending) {
+      car.pending.t -= h;
+      if (car.pending.t <= 0) {
+        if (laneFree(car, car.pending.lane)) car.target = car.pending.lane; else car.signal = 0;
+        car.pending = null;
       }
     }
     // abandonne le changement si la file se remplit, sinon glisse vers elle
-    if (car.target !== car.lane && !laneFree(car, car.target) && Math.abs(car.offset - LANE_X[car.lane]) < 0.2) car.target = car.lane;
+    if (car.target !== car.lane && !laneFree(car, car.target) && Math.abs(car.offset - LANE_X[car.lane]) < 0.2) { car.target = car.lane; car.signal = 0; }
     const d = LANE_X[car.target] - car.offset;
     car.offset += clamp(d, -0.5 * h, 0.5 * h);
-    if (Math.abs(d) < 0.01) car.lane = car.target;
+    if (Math.abs(d) < 0.01) { car.lane = car.target; if (!car.pending) car.signal = 0; }
     car.z = wrap(car.z + car.speed * h);
   }
 }

@@ -145,9 +145,27 @@ function makeCarMesh(car, paintHex, opts = {}) {
     const ug = new THREE.Mesh(glowGeo, new THREE.MeshBasicMaterial({ map: TEXS.radial, color: new THREE.Color(opts.glow), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
     ug.scale.set(Wd * 2.2, 1, L * 1.35); ug.position.y = 0.04; g.add(ug);
   }
+  // clignotants : un feu orange à chaque coin + un halo bien visible de loin
+  const blinkers = { left: [], right: [] };
+  const by = car.d.tail - 0.22, fy = car.d.nose - 0.14;
+  for (const side of [-1, 1]) {
+    const list = side < 0 ? blinkers.left : blinkers.right;
+    for (const [z, y, w] of [[L / 2 + 0.03, by, 0.2], [-L / 2 - 0.03, fy, 0.16]]) {
+      const lamp = new THREE.Mesh(blinkGeo, MAT.blinkOff);
+      lamp.scale.set(w, 0.09, 0.04); lamp.position.set(side * (Wd / 2 - 0.1), y, z);
+      inner.add(lamp);
+      const halo = new THREE.Sprite(MAT.blinkHalo);
+      halo.scale.set(1.5, 1.5, 1); halo.position.set(side * (Wd / 2 - 0.05), y, z + Math.sign(z) * 0.08); halo.visible = false;
+      inner.add(halo);
+      list.push({ lamp, halo });
+    }
+  }
+  const setLamp = (arr, on) => { for (const b of arr) { b.lamp.material = on ? MAT.blinkOn : MAT.blinkOff; b.halo.visible = on; } };
   const wheels = body.wheels || [], rw = body.rw || car.d.rw;
   g.userData = {
-    inner, len: L, tailGlow: tg, setBrake: body.setBrake || (() => {}),
+    inner, len: L, tailGlow: tg,
+    /* clignotants : left / right allumés ou non (l'appelant gère le clignotement) */
+    setIndicators: (left, right) => { setLamp(blinkers.left, left); setLamp(blinkers.right, right); }, setBrake: body.setBrake || (() => {}),
     /* braquage des roues avant (radians, + = à droite) et distance parcourue (mètres) */
     animWheels: (steerAngle, meters) => {
       for (const w of wheels) { if (w.front) w.steer.rotation.y = -steerAngle; w.spin.rotation.x -= meters / rw; }
@@ -155,7 +173,7 @@ function makeCarMesh(car, paintHex, opts = {}) {
   };
   return g;
 }
-let shadowGeo = null, glowGeo = null;
+let shadowGeo = null, glowGeo = null, blinkGeo = null;
 
 /* Un vrai modèle vient d'arriver : on remplace les voitures provisoires déjà affichées. */
 function onModelReady(car) {

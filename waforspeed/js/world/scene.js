@@ -120,12 +120,15 @@ function render3D(dt, t) {
     const yaw = car.crash ? car.crash.yaw : clamp(Math.atan2(lat, Math.max(car.speed * M, 2)), -0.3, 0.3);
     placeOnTrack(m, sP + rel, car.offset, yaw, car.crash ? Math.sin(car.crash.t * 9) * Math.max(0, 0.06 - car.crash.t * 0.03) : 0);
     m.userData.animWheels(car.crash ? 0 : yaw * 1.6, car.speed * M * dt);
+    // clignotants (feux de détresse si accidentée) ; chaque voiture a son propre rythme
+    const blinkOn = ((t / 1000) + (car.rng % 997) / 997) % 0.72 < 0.38;
+    if (car.crash) m.userData.setIndicators(blinkOn, blinkOn);
+    else m.userData.setIndicators(blinkOn && car.signal < 0, blinkOn && car.signal > 0);
     if (car.crash) {
-      // feux de détresse et fumée du capot
-      m.userData.tailGlow.visible = (t / 1000) % 0.8 < 0.4;
+      // fumée du capot
       car.crash.smoke -= dt;
       if (car.crash.t < 5 && car.crash.smoke <= 0) { car.crash.smoke = 0.12; const q = trackPoint(sP + rel - car.len * 0.35, car.offset * RW, {}); emitSmoke({ x: q.x, y: q.y + 1.1, z: q.z }, 1); }
-    } else m.userData.tailGlow.visible = true;
+    }
     car.prevOff = car.offset;
   }
   // rivaux
