@@ -132,7 +132,6 @@ function startDuelRace() {
   state = 'count'; myFinish = 0; presenceTimer = 0; raceStartWall = performance.now();
   sub.presence({ st: 'race', r: round, d: 0, x: 0, v: 0, ft: null, car: myCar.id, paint: myPaint().id }).catch(() => {});
   show(null);
-  Music.forRace();
   Object.keys(last).forEach((k) => delete last[k]);
   updateHud(); advertise();
 }

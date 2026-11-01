@@ -11,7 +11,6 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Orbitron:wght@700;800;900&family=Inter:wght@400;500;600&display=swap">
@@ -91,7 +90,6 @@
         <li><kbd>C</kbd><span>Caméra</span></li>
         <li><kbd>P</kbd><span>Pause</span></li>
         <li><kbd>M</kbd><span>Son</span></li>
-        <li><kbd>N</kbd><span>Morceau suivant</span></li>
       </ul>
     </details>
     <p class="intro only-touch">Flèches à gauche : volant. À droite : Gaz, Frein (à l'arrêt : marche arrière), Nitro.</p>
@@ -124,16 +122,6 @@
   <p class="note show-credit" id="carModelNote"></p>
 </section>
 
-<div class="radio" id="radio">
-  <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
-  <div class="radio-info"><span class="label">Radio WaForSpeed</span><span class="radio-name" id="radioName">Clique pour lancer la musique</span></div>
-  <button class="ibtn" id="radioPrev" aria-label="Morceau précédent"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
-  <button class="ibtn" id="radioPlay" aria-label="Lecture"><svg viewBox="0 0 24 24" id="radioPlayIcon"><path d="M7 4v16l13-8z"/></svg></button>
-  <button class="ibtn" id="radioNext" aria-label="Morceau suivant"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
-  <input type="range" id="musicVol" min="0" max="100" value="70" aria-label="Volume de la musique">
-  <label class="ibtn add" title="Ajouter mes musiques (MP3, M4A…)" aria-label="Ajouter mes musiques">+<input type="file" id="musicFiles" accept="audio/*" multiple hidden></label>
-</div>
-<p class="radio-msg" id="radioMsg" hidden></p>
 
 <section class="screen screen--garage" id="mapSel" hidden aria-labelledby="mapName">
   <div class="screen-inner">
@@ -257,7 +245,6 @@
 <script src="js/game/state.js"></script>
 <script src="js/game/traffic.js"></script>
 <script src="js/audio/sfx.js"></script>
-<script src="js/audio/music.js"></script>
 <script src="js/ui/toasts.js"></script>
 <script src="js/game/update.js"></script>
 <script src="js/ui/hud.js"></script>

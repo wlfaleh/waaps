@@ -43,7 +43,6 @@ function boot() {
   resetRace('menu', 7);
   setMuted(muted);
   setQualityLabel();
-  renderRadio();
   renderGarageUI();
   initRoom();
   $('#best').textContent = best ? best.toLocaleString('fr-FR') : '—';
