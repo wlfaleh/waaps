@@ -242,6 +242,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyP' || e.code === 'Escape') { if (state === 'play') pauseGame(); else if (state === 'pause') resumeGame(); e.preventDefault(); }
   else if (e.code === 'KeyM') { audioInit(); setMuted(!muted); }
   else if (e.code === 'KeyN') { audioInit(); Music.next(); }
+  else if (e.code === 'KeyC') cycleCamera();
   else if (e.code === 'Enter' && ((state === 'menu' && !screens.menu.hidden) || (state === 'over' && overTimer > 1)) && document.activeElement === document.body) {
     if (state === 'menu') openGarage('solo'); else startRace();
   }
@@ -257,3 +258,6 @@ document.querySelectorAll('.tbtn').forEach((b) => {
   b.addEventListener('pointercancel', off); b.addEventListener('pointerleave', off);
   b.addEventListener('contextmenu', (e) => e.preventDefault());
 });
+
+$('#camBtn').addEventListener('click', (e) => { cycleCamera(); e.currentTarget.blur(); });
+$('#camBtn').lastChild.textContent = CAM_MODES[camMode].name;
