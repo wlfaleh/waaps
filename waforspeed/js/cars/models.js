@@ -117,7 +117,7 @@ function realBody(car, paintHex, opts) {
 /* Roues d'un vrai modèle : on repère les nœuds nommés « wheel », « roue », « tire »…
    et on les accroche à un pivot (braquage) puis à un axe (rotation). Sans nœud de roue,
    la voiture roule simplement sans animation de roues. */
-const WHEEL_RX = /(wheel|roue|tire|tyre|pneu|rim)/i;
+const WHEEL_RX = /(wheel|roue|tire|tyre|pneu|(^|[^a-z])rim([^a-z]|$))/i;   // « rim » seul, pas « trim »
 /* Roues d'un vrai modèle : on repère les morceaux de roue (nom contenant wheel, roue, tire, rim…),
    on les regroupe par coin de la voiture, puis chaque roue est accrochée à un pivot (braquage)
    et à un axe (rotation). Les étriers et le reste ne bougent pas. */
@@ -130,7 +130,9 @@ function rigWheels(obj, car) {
     if (!o.isMesh) return;
     const name = (o.name || '') + ' ' + (o.parent ? o.parent.name || '' : '');
     if (!rx.test(name) || /calip|callip|brake|etrier/i.test(name)) return;
-    const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+    const bb = new THREE.Box3().setFromObject(o), c = bb.getCenter(new THREE.Vector3()), sz = bb.getSize(new THREE.Vector3());
+    // une pièce de roue est près du sol et pas plus grande qu'une roue
+    if (c.y > car.d.rw * 1.8 || sz.y > 1.0 || sz.z > 1.0) return;
     const key = (c.x > 0 ? 'R' : 'L') + (c.z < 0 ? 'F' : 'B');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(o);
