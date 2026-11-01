@@ -124,6 +124,11 @@ kbd {
 .tbtn.down { background: var(--surface-2); color: var(--accent-2); }
 .tbtn.nitro-btn { color: var(--success); }
 .tbtn.nitro-btn.down { background: var(--success); color: var(--on-accent); }
+.pedals { display: flex; flex-direction: column; gap: 8px; }
+.pedals .nitro-btn { width: 84px; height: 44px; }
+.tbtn.gas-btn { width: 84px; height: 92px; background: var(--accent); color: var(--on-accent); border-color: transparent; font-size: 17px; }
+.tbtn.gas-btn.down { background: #ff8a33; box-shadow: var(--glow-accent); color: var(--on-accent); }
+.touch .group { align-items: flex-end; }
 
 /* ---------- Écrans ---------- */
 .screen {
@@ -301,7 +306,7 @@ h2.big {
 @media (pointer: coarse) {
   .only-touch { display: block; }
   .only-desk { display: none; }
-  .hud-bottom { bottom: calc(var(--gutter-b) + 86px); }
+  .hud-bottom { bottom: calc(var(--gutter-b) + 156px); }
   .speedo { width: 112px; height: 112px; }
   .speedo-read span:first-child { font-size: 28px; }
   .nitro { min-width: 150px; padding: 8px 12px; }

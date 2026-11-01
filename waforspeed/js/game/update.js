@@ -61,7 +61,7 @@ function update(dt) {
   nitroOn = playing && input.nitro && nitro > 0.01;
   if (nitroOn) nitro = Math.max(0, nitro - dt * PERF.nitroBurn);
   const top = MAX_SPEED * PERF.top * (nitroOn ? PERF.nitroMult : 1);
-  const accelerating = playing && (input.up || isTouch) && !input.down;
+  const accelerating = playing && input.up && !input.down;
   braking = playing && input.down;
   if (auto) speed = lerp(speed, MAX_SPEED * 0.62, Math.min(1, dt));
   else if (state === 'count') speed = 0;
