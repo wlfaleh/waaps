@@ -71,20 +71,43 @@ function placeOnTrack(obj, sAbs, offset, yaw = 0, roll = 0) {
 /* --- caméra de poursuite --- */
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), tmpA = {}, tmpB = {};
 let camInit = false, fovNow = 62;
+/* trois vues : proche (par défaut), loin, capot */
+const CAM_MODES = [
+  { id: 'proche', name: 'Proche', dist: 4.1, h: 1.3, ahead: 7, lookH: 0.8, fov: 60 },
+  { id: 'loin', name: 'Loin', dist: 8, h: 2.5, ahead: 14, lookH: 0.9, fov: 62 },
+  { id: 'capot', name: 'Capot', hood: true, fov: 70 }
+];
+let camMode = Math.max(0, CAM_MODES.findIndex((m) => m.id === store('waforspeed-cam')));
+function cycleCamera() {
+  camMode = (camMode + 1) % CAM_MODES.length;
+  store('waforspeed-cam', CAM_MODES[camMode].id); camInit = false;
+  const b = $('#camBtn'); if (b) b.lastChild.textContent = CAM_MODES[camMode].name;
+}
 function updateCamera(dt, sP) {
-  const portrait = W < H;
-  trackPoint(sP - (portrait ? 9.5 : 6.4) / M, playerX * RW * 0.82, tmpA);
-  trackPoint(sP + 16 / M, playerX * RW * 0.55, tmpB);
-  const p = speed / MAX_SPEED;
-  const desired = new THREE.Vector3(tmpA.x, tmpA.y + (portrait ? 2.9 : 2.25) + p * 0.25, tmpA.z);
-  const look = new THREE.Vector3(tmpB.x, tmpB.y + 0.9, tmpB.z);
-  const k = camInit ? 1 - Math.exp(-dt * 10) : 1;
+  const portrait = W < H, C = CAM_MODES[camMode], p = Math.abs(speed) / MAX_SPEED;
+  trackPoint(sP, playerX * RW, tmpA);
+  const car = playerMesh.position;
+  // la caméra suit en partie l'orientation de la voiture : dans les virages on voit son flanc
+  const hd = tmpA.th + (playerYaw + spinYaw * 0.35) * (C.hood ? 1 : 0.6);
+  const fx = Math.sin(hd), fz = -Math.cos(hd), rx = Math.cos(hd), rz = Math.sin(hd);
+  let desired, look;
+  if (C.hood) {
+    desired = new THREE.Vector3(car.x + fx * 1.5, car.y + 1.08, car.z + fz * 1.5);
+    look = new THREE.Vector3(car.x + fx * 30, car.y + 0.9, car.z + fz * 30);
+  } else {
+    const dist = C.dist * (portrait ? 1.08 : 1) + p * 0.5, side = -steer * 0.8 * Math.min(1, p * 2);
+    desired = new THREE.Vector3(car.x - fx * dist + rx * side, car.y + C.h * (portrait ? 1.08 : 1) + p * 0.15, car.z - fz * dist + rz * side);
+    const ground = trackPoint(sP - dist / M, playerX * RW, tmpB).y + 0.6;
+    if (desired.y < ground) desired.y = ground;   // jamais sous la route dans les côtes
+    look = new THREE.Vector3(car.x + fx * C.ahead, car.y + C.lookH, car.z + fz * C.ahead);
+  }
+  const k = camInit ? 1 - Math.exp(-dt * (C.hood ? 30 : 9)) : 1;
   camPos.lerp(desired, k); camLook.lerp(look, camInit ? 1 - Math.exp(-dt * 14) : 1); camInit = true;
   camera.position.copy(camPos);
   if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - 0.5) * shake * 0.6, (Math.random() - 0.5) * shake * 0.4, 0));
   camera.lookAt(camLook);
-  camera.rotateZ(-steer * 0.03);
-  const fov = (W < H ? 70 : 62) + Math.min(p, 1.3) * 9 + (nitroOn ? 7 : 0);
+  camera.rotateZ(-steer * (C.hood ? 0.015 : 0.03));
+  const fov = C.fov + (portrait ? 5 : 0) + Math.min(p, 1.3) * 7 + (nitroOn ? 6 : 0);
   fovNow += (fov - fovNow) * Math.min(1, dt * 4);
   camera.fov = fovNow; camera.updateProjectionMatrix();
   sky.position.copy(camera.position);
@@ -177,6 +200,7 @@ function render3D(dt, t) {
   // pales des éoliennes
   for (const g of chunks.values()) for (const r of g.userData.rotors || []) r.rotation.z += r.userData.spin * dt;
   if (headlight) headlight.intensity = ENV.headlight;
+  playerMesh.visible = !CAM_MODES[camMode].hood;   // vue capot : on ne voit pas sa propre voiture
   if (composer) { renderPass.scene = scene; renderPass.camera = camera; bloom.strength = ENV.bloom[0]; bloom.threshold = ENV.bloom[1]; composer.render(dt); }
   else renderer.render(scene, camera);
   drawFx(dt);
