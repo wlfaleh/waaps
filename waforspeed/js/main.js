@@ -1,0 +1,48 @@
+/* WaForSpeed — Démarrage et boucle principale. */
+'use strict';
+
+/* ================= Boucle ================= */
+let lastT = 0;
+function frame(t) {
+  const dt = Math.min(0.05, Math.max(0, (t - lastT) / 1000));
+  lastT = t;
+  update(dt);
+  if (renderer) render3D(dt, t);
+  if (state === 'play' || state === 'pause' || state === 'over' || state === 'count') updateHud();
+  engineUpdate();
+  requestAnimationFrame(frame);
+}
+function boot() {
+  buildTrack();
+  if (THREE) {
+    try {
+      setupThree();
+      shadowGeo = new THREE.PlaneGeometry(1, 1); shadowGeo.rotateX(-Math.PI / 2);
+      glowGeo = shadowGeo;
+      boardGeo = new THREE.PlaneGeometry(8, 3.2);
+      resetPoses();
+      buildPlayer();
+      loadRealModels();
+      setupComposer();
+    } catch (e) { console.error(e); renderer = null; }
+  }
+  if (!renderer) {
+    const n = $('.intro'); if (n) { n.textContent = 'Le moteur 3D n\'a pas pu démarrer sur cet appareil (WebGL indisponible ou bibliothèque bloquée).'; n.classList.add('warn'); }
+    $('#startBtn').disabled = true; $('#duelBtn').disabled = true; $('#garageBtn').disabled = true;
+  }
+  resetRace('menu', 7);
+  setMuted(muted);
+  setQualityLabel();
+  renderRadio();
+  renderGarageUI();
+  initRoom();
+  $('#best').textContent = best ? best.toLocaleString('fr-FR') : '—';
+  drawSpeedo(0);
+  show('menu');
+  lastT = performance.now();
+  requestAnimationFrame(frame);
+}
+const fontsReady = document.fonts && document.fonts.load
+  ? Promise.all(['700 20px Rajdhani', '800 20px Orbitron', '600 20px Inter'].map((f) => document.fonts.load(f))).catch(() => {})
+  : Promise.resolve();
+Promise.race([fontsReady, new Promise((r) => setTimeout(r, 1500))]).then(boot);
