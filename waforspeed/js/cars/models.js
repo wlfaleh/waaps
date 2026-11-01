@@ -210,6 +210,43 @@ function makeCarMesh(car, paintHex, opts = {}) {
 let shadowGeo = null, glowGeo = null, blinkGeo = null, blurGeo = null;
 let lastDt = 1 / 60;
 
+/* Version lointaine d'une voiture : une seule géométrie (couleurs par sommet), roues comprises.
+   Même silhouette, coût minimal : utilisée pour le trafic éloigné. */
+const lowGeoCache = new Map();
+const LOW_COLORS = { glass: '#0a0e16', trim: '#0c0d12', liner: '#08090c', seam: '#050608', tire: '#141416', rimIn: '#2a2c32',
+  chrome: '#9aa0aa', rim: '#9aa0aa', disc: '#6d7078', head: '#fff3dc', tail: '#ff4868', plate: '#e8eaee', seat: '#3a2a22' };
+function makeCarLow(car, paintHex) {
+  const key = car.id + paintHex;
+  if (!lowGeoCache.has(key)) {
+    const m = buildModel(car), parts = [];
+    for (const k in m.geos) parts.push([m.geos[k], k === 'paint' ? paintHex : k === 'roof' ? (car.roof || paintHex) : LOW_COLORS[k] || '#222222']);
+    for (const w of m.wheelPos) for (const k in m.wheelGeo[w.side]) {
+      const g = m.wheelGeo[w.side][k].clone(); g.translate(w.x, w.y, w.z); parts.push([g, LOW_COLORS[k] || '#222222']);
+    }
+    let n = 0;
+    const list = parts.map(([g, c]) => { const q = g.index ? g.toNonIndexed() : g; n += q.attributes.position.count; return [q, new THREE.Color(c)]; });
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
+    let o = 0;
+    for (const [q, c] of list) {
+      pos.set(q.attributes.position.array, o * 3); nor.set(q.attributes.normal.array, o * 3);
+      for (let i = 0; i < q.attributes.position.count; i++) { col[(o + i) * 3] = c.r; col[(o + i) * 3 + 1] = c.g; col[(o + i) * 3 + 2] = c.b; }
+      o += q.attributes.position.count;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeBoundingSphere();
+    lowGeoCache.set(key, geo);
+  }
+  if (!MAT.carLow) { MAT.carLow = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3, envMap: MAT.env, envMapIntensity: 0.4 }); envMats.add(MAT.carLow); }
+  const g = new THREE.Group();
+  g.rotation.order = 'YXZ';
+  const inner = new THREE.Group();
+  inner.add(new THREE.Mesh(lowGeoCache.get(key), MAT.carLow));
+  g.add(inner);
+  g.userData = { inner, len: car.d.L, tailGlow: { visible: true }, setBrake: () => {}, setIndicators: () => {}, animWheels: () => {} };
+  return g;
+}
+
 /* Un vrai modèle vient d'arriver : on remplace les voitures provisoires déjà affichées. */
 function onModelReady(car) {
   if (myCar.id === car.id) buildPlayer();

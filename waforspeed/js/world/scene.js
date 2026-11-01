@@ -27,11 +27,20 @@ function setGantry(label, col, sAbs) {
 }
 
 /* --- trafic & rivaux en 3D --- */
-function trafficMesh(car) {
+const LOD_CAR_M = 70;   // au-delà, voiture simplifiée en une seule pièce (1 appel de dessin)
+function trafficMesh(car, far) {
+  if (far) {
+    if (!car.lowMesh) { car.lowMesh = makeCarLow(CARS[car.type], TRAFFIC_PAINTS[car.color]); scene.add(car.lowMesh); }
+    if (car.mesh) car.mesh.visible = false;
+    return car.lowMesh;
+  }
   if (!car.mesh) { car.mesh = makeCarMesh(CARS[car.type], TRAFFIC_PAINTS[car.color], { traffic: true }); scene.add(car.mesh); }
+  if (car.lowMesh) car.lowMesh.visible = false;
   return car.mesh;
 }
-function clearTrafficMeshes() { for (const c of cars) { if (c.mesh) scene.remove(c.mesh); c.mesh = null; } }
+function clearTrafficMeshes() {
+  for (const c of cars) { if (c.mesh) scene.remove(c.mesh); if (c.lowMesh) scene.remove(c.lowMesh); c.mesh = null; c.lowMesh = null; }
+}
 const ghostMeshes = new Map();
 function nameSprite(name) {
   const [c, g] = makeCanvas(256, 64);
@@ -73,7 +82,7 @@ const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), tmpA = {}, tm
 let camInit = false, fovNow = 62;
 /* trois vues : proche (par défaut), loin, capot */
 const CAM_MODES = [
-  { id: 'proche', name: 'Proche', dist: 4.1, h: 1.3, ahead: 7, lookH: 0.8, fov: 60 },
+  { id: 'proche', name: 'Proche', dist: 4.8, h: 1.35, ahead: 7, lookH: 0.8, fov: 60 },
   { id: 'loin', name: 'Loin', dist: 8, h: 2.5, ahead: 14, lookH: 0.9, fov: 62 },
   { id: 'capot', name: 'Capot', hood: true, fov: 70 }
 ];
@@ -95,7 +104,7 @@ function updateCamera(dt, sP) {
     desired = new THREE.Vector3(car.x + fx * 1.5, car.y + 1.08, car.z + fz * 1.5);
     look = new THREE.Vector3(car.x + fx * 30, car.y + 0.9, car.z + fz * 30);
   } else {
-    const dist = C.dist * (portrait ? 1.08 : 1) + p * 0.5, side = -steer * 0.8 * Math.min(1, p * 2);
+    const dist = C.dist * (portrait ? 0.92 : 1) + p * 0.5, side = -steer * 0.8 * Math.min(1, p * 2);
     desired = new THREE.Vector3(car.x - fx * dist + rx * side, car.y + C.h * (portrait ? 1.08 : 1) + p * 0.15, car.z - fz * dist + rz * side);
     const ground = trackPoint(sP - dist / M, playerX * RW, tmpB).y + 0.6;
     if (desired.y < ground) desired.y = ground;   // jamais sous la route dans les côtes
@@ -145,8 +154,8 @@ function render3D(dt, t) {
   // trafic
   for (const car of cars) {
     const rel = relZ(car.z - position);
-    const m = trafficMesh(car);
-    if (rel < -20 / M || rel > (VIEW * SEG_M + 30) / M) { m.visible = false; continue; }
+    if (rel < -20 / M || rel > (VIEW * SEG_M + 30) / M) { if (car.mesh) car.mesh.visible = false; if (car.lowMesh) car.lowMesh.visible = false; continue; }
+    const m = trafficMesh(car, Math.abs(rel * M) > LOD_CAR_M);
     m.visible = true;
     const lat = (car.offset - car.prevOff) * RW / Math.max(dt, 1e-3);
     const yaw = car.crash ? car.crash.yaw : clamp(Math.atan2(lat, Math.max(car.speed * M, 2)), -0.3, 0.3);
