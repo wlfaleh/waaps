@@ -68,32 +68,132 @@ function roofShape(d, P) {
   s.closePath();
   return s;
 }
+/* Carrosserie par sections, de l'avant (sx = +L/2) vers l'arrière (sx = -L/2).
+   Chaque section est un profil arrondi : soubassement, flanc galbé, épaule, vitres qui rentrent
+   vers l'intérieur, toit bombé. Les surfaces sont lissées ; vitres, montants et toit font partie
+   de la même coque (matériau choisi selon la zone). */
+function loftBody(car, P, part, roofKey) {
+  const d = car.d, f = d.L / 2, H = d.H - 0.03, rw = d.rw, rA = rw + 0.07, cy = rw * 0.95, rc = 0.42;
+  const tumble = d.tumble || 0.8, bp = (P.rs + P.re) / 2 + 0.12, pc = d.pc || 0.3;
+  const smooth = (u) => u * u * (3 - 2 * u);
+  const top = (sx) => {
+    if (sx > f - 0.22) return lerp(d.nose - 0.07, d.nose, Math.sqrt(clamp((f - sx) / 0.22, 0, 1)));
+    if (sx > P.ws) { const u = (f - 0.22 - sx) / (f - 0.22 - P.ws); return d.nose + (d.belt - 0.02 - d.nose) * (u * 0.7 + u * u * 0.3); }
+    if (d.cabrio) {
+      if (sx > P.deck) return d.belt - 0.02;
+      if (sx > -f + 0.08) return lerp(d.belt - 0.02, d.tail, smooth((P.deck - sx) / (P.deck + f - 0.08)));
+      return lerp(d.tail, d.tail - 0.06, (-f + 0.08 - sx) / 0.08);
+    }
+    if (sx > P.rs) { const u = (P.ws - sx) / (P.ws - P.rs); return d.belt - 0.02 + (H - d.belt + 0.02) * (1 - Math.pow(1 - u, 1.7)); }
+    if (sx > P.re) { const u = (P.rs - sx) / (P.rs - P.re); return H - d.drop * u * u; }
+    if (sx > P.cs) { const u = (P.re - sx) / (P.re - P.cs); return H - d.drop + (d.beltR + 0.02 - H + d.drop) * Math.pow(u, 0.9); }
+    if (sx > -f + 0.07) return lerp(d.beltR + 0.02, d.tail, smooth((P.cs - sx) / (P.cs + f - 0.07)));
+    return lerp(d.tail, d.tail - 0.06, (-f + 0.07 - sx) / 0.07);
+  };
+  const beltAt = (sx) => lerp(d.belt, d.beltR, clamp((P.ws - sx) / (P.ws - (d.cabrio ? -f : P.cs)), 0, 1));
+  const bottom = (sx) => {
+    const dEnd = Math.min(f - sx, sx + f);
+    let b = d.gc + (dEnd < 0.3 ? 0.2 * Math.pow(1 - dEnd / 0.3, 2) : 0);
+    for (const wz of [P.wf, P.wr]) { const q = sx - wz; if (Math.abs(q) < rA) b = Math.max(b, cy + Math.sqrt(rA * rA - q * q)); }
+    return b;
+  };
+  const halfW = (sx) => {
+    const dEnd = Math.min(f - sx, sx + f), w = d.W / 2;
+    return dEnd < rc ? w - (rc - Math.sqrt(Math.max(0, rc * rc - (rc - dEnd) * (rc - dEnd)))) : w;
+  };
+  const N = 150, K = 16, pos = [];
+  const rings = [];
+  for (let i = 0; i < N; i++) {
+    const sx = f - i * (2 * f) / (N - 1);
+    const t = top(sx), b = bottom(sx), bl = Math.min(beltAt(sx), t - 0.005), hw = halfW(sx);
+    const g = clamp((t - bl) / 0.3, 0, 1);
+    const half = [
+      [0, b], [hw * 0.86, b], [hw * 0.98, b + 0.1], [hw, b + (bl - b) * 0.55], [hw * 0.985, bl - 0.045], [hw * 0.95, bl],
+      [hw * lerp(0.9, tumble, g), lerp(bl + 0.006, lerp(bl, t, 0.84), g)], [hw * lerp(0.6, tumble * 0.88, g), t - 0.012 * g], [0, t + 0.004 + 0.018 * g]
+    ];
+    const ring = [half[0]];
+    for (let j = 1; j <= 7; j++) ring.push(half[j]);
+    ring.push(half[8]);
+    for (let j = 7; j >= 1; j--) ring.push([-half[j][0], half[j][1]]);
+    rings.push({ sx, t, bl, ring });
+    for (const [x, y] of ring) pos.push(x, y, -sx);
+  }
+  const level = (k) => (k <= 7 ? k : 15 - k);
+  const matFor = (lv, sx, t, bl) => {
+    const gh = !d.cabrio && t - bl > 0.05;
+    if (lv === 0) return 'trim';
+    if (lv <= 4) return 'paint';
+    if (d.cabrio) return sx < P.ws - 0.05 && sx > P.deck && lv >= 6 ? 'trim' : 'paint';
+    if (!gh) return 'paint';
+    if (lv === 5) {
+      if (Math.abs(sx - bp) < 0.06) return 'trim';
+      if (sx > P.rs + 0.12) return 'paint';
+      if (sx < P.re + pc && sx > P.cs) return roofKey;
+      return 'glass';
+    }
+    const ws = sx > P.rs + 0.02, rear = sx < P.re - 0.02 && sx > P.cs;
+    if (ws || rear) return lv === 6 ? roofKey : 'glass';
+    return roofKey;
+  };
+  const idx = {};
+  const all = [];
+  for (let i = 0; i < N - 1; i++) {
+    const r0 = rings[i], r1 = rings[i + 1], sxm = (r0.sx + r1.sx) / 2, tm = (r0.t + r1.t) / 2, blm = (r0.bl + r1.bl) / 2;
+    for (let k = 0; k < K; k++) {
+      const a = i * K + k, b = i * K + (k + 1) % K, c = (i + 1) * K + k, e = (i + 1) * K + (k + 1) % K;
+      const m = matFor(level(k), sxm, tm, blm);
+      (idx[m] = idx[m] || []).push(a, c, b, b, c, e);
+      all.push(a, c, b, b, c, e);
+    }
+  }
+  const posAttr = new THREE.Float32BufferAttribute(pos, 3);
+  const full = new THREE.BufferGeometry();
+  full.setAttribute('position', posAttr); full.setIndex(all);
+  full.computeVertexNormals();
+  // orientation : la normale d'un flanc droit doit pointer vers +x
+  const nrm = full.attributes.normal, probe = Math.floor(N / 2) * K + 3;
+  const flip = nrm.getX(probe) < 0;
+  if (flip) { for (let i = 0; i < nrm.array.length; i++) nrm.array[i] = -nrm.array[i]; }
+  for (const m in idx) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', posAttr); g.setAttribute('normal', nrm);
+    const list = idx[m];
+    if (flip) for (let i = 0; i < list.length; i += 3) { const tmp = list[i + 1]; list[i + 1] = list[i + 2]; list[i + 2] = tmp; }
+    g.setIndex(list);
+    part(m, g);
+  }
+  // faces avant et arrière (bouclier) : facettes planes
+  for (const [i, dir] of [[0, -1], [N - 1, 1]]) {
+    const r = rings[i], cyy = r.ring.reduce((s, q) => s + q[1], 0) / K, z = -r.sx, B = [];
+    for (let k = 0; k < K; k++) {
+      const p0 = r.ring[k], p1 = r.ring[(k + 1) % K];
+      const tri = dir < 0 ? [[0, cyy, z], [p1[0], p1[1], z], [p0[0], p0[1], z]] : [[0, cyy, z], [p0[0], p0[1], z], [p1[0], p1[1], z]];
+      for (const q of tri) B.push(q[0], q[1], q[2]);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(B, 3)); g.computeVertexNormals();
+    if ((dir < 0 && g.attributes.normal.getZ(0) > 0) || (dir > 0 && g.attributes.normal.getZ(0) < 0)) {
+      const a = g.attributes.position.array;
+      for (let q = 0; q < a.length; q += 9) for (let c = 0; c < 3; c++) { const tmp = a[q + 3 + c]; a[q + 3 + c] = a[q + 6 + c]; a[q + 6 + c] = tmp; }
+      g.computeVertexNormals();
+    }
+    part('paint', g);
+  }
+  return { top, beltAt, halfW, H };
+}
 function buildModel(car) {
   if (modelCache.has(car.id)) return modelCache.get(car.id);
   const d = car.d, bk = {};
   const part = (k, g) => { (bk[k] = bk[k] || []).push(g); };
   const bx = (k, w, h, dz, x, y, z) => { const g = new THREE.BoxGeometry(w, h, dz); g.translate(x, y, z); part(k, g); };
-  const f = d.L / 2 - BEV, wf = d.L / 2 - d.oh, wr = wf - d.wb, ws = d.L / 2 - d.hood, rs = ws - d.wsl;
+  const f = d.L / 2, wf = d.L / 2 - d.oh, wr = wf - d.wb, ws = d.L / 2 - d.hood, rs = ws - d.wsl;
   const P = { f, wf, wr, ws, rs, re: d.cabrio ? 0 : wr + d.re, cs: d.cabrio ? 0 : -d.L / 2 + d.rearOh, deck: d.cabrio ? -d.L / 2 + d.deck : 0 };
   const roofKey = car.roof ? 'roof' : 'paint';
-  part('paint', extrudeX(lowerShape(d, P), d.W));
+  const L0 = loftBody(car, P, part, roofKey);
   if (!d.cabrio) {
-    part('glass', extrudeX(glassShape(d, P), d.W * 0.84, 0.04, 2));
-    part(roofKey, extrudeX(roofShape(d, P), d.W * 0.8, 0.03, 2));
-    // montants C (de chaque côté seulement, pour garder la lunette visible)
-    const top = d.H - 0.05;
-    const roofAt = (sx) => top - d.drop * clamp((P.rs - sx) / (P.rs - P.re), 0, 1);
-    const cp = new THREE.Shape();
-    cp.moveTo(P.re + d.pc, roofAt(P.re + d.pc) - 0.01);
-    cp.lineTo(P.re - 0.03, top - d.drop - 0.01);
-    cp.lineTo(P.cs + 0.04, d.beltR - 0.07);
-    cp.lineTo(P.cs + d.pc + 0.4, d.beltR - 0.07);
-    cp.closePath();
-    for (const sx of [-1, 1]) { const g = extrudeX(cp, 0.05, 0.012, 1); g.translate(sx * (d.W * 0.42 + 0.03), 0, 0); part(roofKey, g); }
-    // montant B
-    bx('trim', d.W * 0.85, (top - d.belt) * 0.92, 0.08, 0, d.belt + (top - d.belt) * 0.44, -((P.rs + P.re) / 2 + 0.12));
-    // feu stop central
-    bx('tail', 0.46, 0.035, 0.04, 0, top - d.drop + 0.04, -P.re + 0.06);
+    // feu stop central et becquet au bout du pavillon
+    const yr = L0.H - d.drop;
+    bx('tail', 0.46, 0.035, 0.04, 0, yr + 0.035, -P.re + 0.1);
+    if (['golf', 'clio', 'a3', 'troc'].includes(car.style)) bx('trim', d.W * 0.66, 0.035, 0.32, 0, yr + 0.005, -P.re + 0.06);
   } else {
     // habitacle ouvert : bac, sièges, pare-brise
     bx('trim', d.W * 0.8, 0.03, P.ws - P.deck - 0.1, 0, d.belt + 0.01, -((P.ws + P.deck) / 2));
@@ -115,9 +215,6 @@ function buildModel(car) {
   }
   bx('trim', d.W + 0.02, 0.06, d.wb - 2 * (d.rw + 0.12), 0, d.gc + 0.1, -(wf + wr) / 2);
   // détails de carrosserie : liseré chromé sous les vitres, joints de portières, poignées, passages de roue noirs
-  if (!d.cabrio) for (const sx of [-1, 1]) {
-    bx('chrome', 0.02, 0.022, P.ws - P.cs - 0.25, sx * (d.W * 0.42 + 0.03), d.belt - 0.05, -(P.ws + P.cs) / 2 - 0.05);
-  }
   const doorH = d.belt - d.gc - 0.2, doorY = d.gc + 0.16 + doorH / 2;
   const seams = d.cabrio ? [P.ws - 0.08, P.ws - 1.3] : [P.ws - 0.08, (P.rs + P.re) / 2 + 0.1, P.cs + 0.55];
   for (const sx of [-1, 1]) {
