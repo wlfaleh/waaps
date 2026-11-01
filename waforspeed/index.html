@@ -1,0 +1,251 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WaForSpeed</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="WaForSpeed : course de rue arcade en 3D, de nuit, en solo ou en duel.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Orbitron:wght@700;800;900&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+
+<canvas id="game" aria-label="Vue de la course"></canvas>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<div class="hud" id="hud" hidden>
+  <div class="hud-top">
+    <div class="hud-col">
+    <div class="panel p-time">
+      <span class="label" id="timeLabel">Temps</span>
+      <span class="time-value" id="time">30.0</span>
+      <div class="cp">
+        <span class="label"><span id="cpLabel">Checkpoint</span> <b id="cpn">1</b></span>
+        <div class="cp-bar"><i id="cpbar"></i></div>
+      </div>
+    </div>
+    <div class="panel duel-board" id="duelBoard" hidden></div>
+    </div>
+    <div class="panel p-score">
+      <span class="label" id="scoreLabel">Score</span>
+      <span class="score-value" id="score">0</span>
+      <span class="combo" id="combo"></span>
+    </div>
+  </div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <div class="hud-bottom">
+    <div class="panel nitro" id="nitroPanel">
+      <span class="label">Nitro <kbd>Espace</kbd></span>
+      <div class="nitro-bar" id="nitroBar"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="speedo" id="speedoBox">
+      <canvas id="speedo" width="380" height="380"></canvas>
+      <div class="speedo-read"><span id="kmh">0</span><span class="unit">KM/H</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="touch" id="touch" hidden>
+  <div class="group">
+    <button class="tbtn" data-key="left" aria-label="Gauche"><svg viewBox="0 0 24 24"><path d="M15.5 4 7 12l8.5 8 1.5-1.6L10.2 12 17 5.6z"/></svg></button>
+    <button class="tbtn" data-key="right" aria-label="Droite"><svg viewBox="0 0 24 24"><path d="M8.5 4 17 12l-8.5 8L7 18.4 13.8 12 7 5.6z"/></svg></button>
+  </div>
+  <div class="group">
+    <button class="tbtn" data-key="down">Frein</button>
+    <div class="pedals">
+      <button class="tbtn nitro-btn" data-key="nitro">Nitro</button>
+      <button class="tbtn gas-btn" data-key="up">Gaz</button>
+    </div>
+  </div>
+</div>
+
+<section class="screen" id="menu" aria-labelledby="logo">
+  <div class="screen-inner">
+    <p class="eyebrow">Sprint urbain · nuit · pluie</p>
+    <h1 class="logo" id="logo"><span>Wa<em>for</em></span><span class="speed">Speed</span></h1>
+    <p class="intro">Traverse la ville avant la fin du chrono. Frôle le trafic pour remplir ta nitro et enchaîner les combos, passe les checkpoints pour gagner du temps.</p>
+    <div class="actions">
+      <button class="btn" id="startBtn">Course solo</button>
+      <button class="btn btn--ghost" id="duelBtn">Duel en ligne</button>
+      <button class="btn btn--ghost" id="garageBtn">Garage</button>
+      <button class="btn btn--ghost" id="qualityBtn">Graphismes : haute</button>
+    </div>
+    <div class="record"><span class="label">Record</span><strong id="best">—</strong></div>
+    <ul class="keys only-desk">
+      <li><kbd>↑</kbd><kbd>Z</kbd><span>Accélérer</span></li>
+      <li><kbd>↓</kbd><kbd>S</kbd><span>Freiner · maintenu à l'arrêt : marche arrière</span></li>
+      <li><kbd>←</kbd><kbd>→</kbd><kbd>Q</kbd><kbd>D</kbd><span>Diriger</span></li>
+      <li><kbd>Espace</kbd><span>Nitro</span></li>
+      <li><kbd>P</kbd><span>Pause</span></li>
+      <li><kbd>M</kbd><span>Couper le son</span></li>
+      <li><kbd>N</kbd><span>Morceau suivant</span></li>
+    </ul>
+    <p class="intro only-touch">Dirige avec les flèches à gauche. À droite : appuie sur Gaz pour accélérer, Frein pour ralentir (maintenu à l'arrêt, la voiture recule), Nitro pour le turbo.</p>
+  </div>
+</section>
+
+<section class="screen screen--garage" id="garage" hidden aria-labelledby="carName">
+  <div class="screen-inner">
+    <p class="eyebrow">Garage · choisis ta voiture</p>
+    <h2 class="big" id="carName">Golf 8</h2>
+    <p class="intro" id="carTag"></p>
+    <p class="note" id="carModelNote"></p>
+    <div class="statlist" id="carStats"></div>
+    <div class="paint-line"><span class="label">Couleur</span><div class="paint-row" id="paintRow" role="group" aria-label="Couleur"></div><span class="paint-name" id="paintName"></span></div>
+    <div class="car-grid" id="carGrid" role="group" aria-label="Voitures"></div>
+    <div class="actions">
+      <button class="btn" id="garageGo">Rouler</button>
+      <button class="btn btn--ghost" id="garageBack">Retour</button>
+    </div>
+  </div>
+  <p class="garage-hint">Glisse pour faire tourner · ← → pour changer</p>
+</section>
+
+<div class="radio" id="radio">
+  <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+  <div class="radio-info"><span class="label">Radio WaForSpeed</span><span class="radio-name" id="radioName">Clique pour lancer la musique</span></div>
+  <button class="ibtn" id="radioPrev" aria-label="Morceau précédent"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+  <button class="ibtn" id="radioPlay" aria-label="Lecture"><svg viewBox="0 0 24 24" id="radioPlayIcon"><path d="M7 4v16l13-8z"/></svg></button>
+  <button class="ibtn" id="radioNext" aria-label="Morceau suivant"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+  <input type="range" id="musicVol" min="0" max="100" value="70" aria-label="Volume de la musique">
+  <label class="ibtn add" title="Ajouter mes musiques (MP3, M4A…)" aria-label="Ajouter mes musiques">+<input type="file" id="musicFiles" accept="audio/*" multiple hidden></label>
+</div>
+<p class="radio-msg" id="radioMsg" hidden></p>
+
+<section class="screen screen--garage" id="mapSel" hidden aria-labelledby="mapName">
+  <div class="screen-inner">
+    <p class="eyebrow">Choisis ton terrain</p>
+    <h2 class="big" id="mapName">Ville néon</h2>
+    <p class="intro" id="mapDesc"></p>
+    <div class="map-grid" id="mapGrid" role="group" aria-label="Terrains"></div>
+    <div class="tod" role="group" aria-label="Moment de la journée">
+      <button class="tod-btn" data-tod="jour" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Jour</button>
+      <button class="tod-btn" data-tod="nuit" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>Nuit</button>
+    </div>
+    <div class="actions">
+      <button class="btn" id="mapGo">Rouler</button>
+      <button class="btn btn--ghost" id="mapBack">Retour</button>
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="pause" hidden aria-labelledby="pauseTitle">
+  <div class="screen-inner">
+    <p class="eyebrow">Course en pause</p>
+    <h2 class="big" id="pauseTitle">Pause</h2>
+    <div class="actions">
+      <button class="btn" id="resumeBtn">Reprendre</button>
+      <button class="btn btn--ghost" id="quitBtn">Abandonner</button>
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="over" hidden aria-labelledby="overTitle">
+  <div class="screen-inner">
+    <p class="eyebrow" id="overTitle">Temps écoulé</p>
+    <h2 class="big"><span class="score-big" id="finalScore">0</span></h2>
+    <span class="badge" id="newBest" hidden>Nouveau record</span>
+    <dl class="stats">
+      <div><dt>Distance</dt><dd id="stDist">0 km</dd></div>
+      <div><dt>Vitesse max</dt><dd id="stSpeed">0 km/h</dd></div>
+      <div><dt>Quasi-contacts</dt><dd id="stNear">0</dd></div>
+      <div><dt>Checkpoints</dt><dd id="stCp">0</dd></div>
+    </dl>
+    <div class="actions">
+      <button class="btn" id="againBtn">Rejouer</button>
+      <button class="btn btn--ghost" id="menuBtn">Menu</button>
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="lobby" hidden aria-labelledby="lobbyTitle">
+  <div class="screen-inner">
+    <p class="eyebrow">Duel en ligne · 2 pilotes</p>
+    <h2 class="big" id="lobbyTitle">Duel</h2>
+    <div class="stack" id="lobbyHome">
+      <div class="field">
+        <label class="label" for="nick">Ton pseudo</label>
+        <input class="input" id="nick" maxlength="14" autocomplete="off" spellcheck="false" placeholder="Pilote">
+      </div>
+      <div class="field" id="openRooms" hidden>
+        <span class="label">Salons qui t'attendent</span>
+        <div class="open-list" id="openList"></div>
+      </div>
+      <div class="actions"><button class="btn" id="createBtn">Créer un salon</button></div>
+      <div class="field">
+        <label class="label" for="codeIn">Ou rejoins avec un code</label>
+        <div class="join-row">
+          <input class="input" id="codeIn" maxlength="4" autocomplete="off" spellcheck="false" placeholder="CODE">
+          <button class="btn btn--ghost" id="joinBtn">Rejoindre</button>
+        </div>
+      </div>
+      <p class="note" id="lobbyNote">Connexion au serveur de jeu…</p>
+      <div class="actions"><button class="btn btn--ghost" id="lobbyBack">Retour</button></div>
+    </div>
+    <div class="stack" id="lobbyRoom" hidden>
+      <div><span class="label">Code du salon</span><div class="room-code" id="roomCode">----</div></div>
+      <div class="car-line"><span class="label">Ta voiture</span><strong id="lobbyCar">Golf 8</strong><button class="btn btn--ghost" id="lobbyGarage">Changer</button></div>
+      <div class="car-line"><span class="label">Terrain</span><strong id="lobbyMap">Ville néon · Nuit</strong><button class="btn btn--ghost" id="lobbyMapBtn">Changer</button><span class="note" id="lobbyMapNote"></span></div>
+      <div class="car-line"><span class="label">Distance</span><div class="tod km-row" id="kmRow" role="group" aria-label="Distance de la course"></div></div>
+      <ul class="players" id="players"></ul>
+      <p class="note" id="roomNote"></p>
+      <div class="actions">
+        <button class="btn" id="readyBtn">Prêt</button>
+        <button class="btn btn--ghost" id="leaveBtn">Quitter le salon</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="duelOver" hidden aria-labelledby="duelTitle">
+  <div class="screen-inner">
+    <p class="eyebrow" id="duelEyebrow">Duel terminé</p>
+    <h2 class="big" id="duelTitle">Victoire</h2>
+    <div class="record"><span class="label">Ton chrono</span><strong id="duelTime">0:00.0</strong></div>
+    <ol class="players" id="duelResults"></ol>
+    <dl class="stats">
+      <div><dt>Vitesse max</dt><dd id="dSpeed">0 km/h</dd></div>
+      <div><dt>Quasi-contacts</dt><dd id="dNear">0</dd></div>
+    </dl>
+    <div class="actions">
+      <button class="btn" id="rematchBtn">Revanche</button>
+      <button class="btn btn--ghost" id="duelQuit">Quitter le duel</button>
+    </div>
+  </div>
+</section>
+
+<div class="countdown" id="countdown" hidden></div>
+
+
+<script src="js/core/config.js"></script>
+<script src="js/core/utils.js"></script>
+<script src="js/cars/catalog.js"></script>
+<script src="js/world/track.js"></script>
+<script src="js/world/maps.js"></script>
+<script src="js/world/decor.js"></script>
+<script src="js/world/renderer.js"></script>
+<script src="js/cars/procedural.js"></script>
+<script src="js/cars/models.js"></script>
+<script src="js/cars/player.js"></script>
+<script src="js/world/scene.js"></script>
+<script src="js/world/garage.js"></script>
+<script src="js/world/fx.js"></script>
+<script src="js/world/particles.js"></script>
+<script src="js/game/state.js"></script>
+<script src="js/game/traffic.js"></script>
+<script src="js/audio/sfx.js"></script>
+<script src="js/audio/music.js"></script>
+<script src="js/ui/toasts.js"></script>
+<script src="js/game/update.js"></script>
+<script src="js/ui/hud.js"></script>
+<script src="js/ui/screens.js"></script>
+<script src="js/net/p2p.js"></script>
+<script src="js/net/duel.js"></script>
+<script src="js/main.js"></script>
