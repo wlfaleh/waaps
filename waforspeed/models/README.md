@@ -19,6 +19,7 @@ Puis, dans `js/cars/catalog.js`, remplace `file: null` par le chemin du fichier 
 ## Format
 
 - **GLB** (un seul fichier) de préférence, ou **glTF** avec textures intégrées.
+- **Collada (.dae)** marche aussi : dépose le `.dae` et ses textures (images) dans `models/`, avec les mêmes noms de fichiers que ceux écrits dans le `.dae`. Le GLB reste conseillé : plus léger et plus rapide à charger.
 - **Pas de compression Draco** (non prise en charge pour l'instant).
 - **Poids** : idéalement moins de 5 Mo et moins de 100 000 triangles par voiture. Au-delà, le jeu reste jouable mais le trafic garde les voitures provisoires pour ne pas ramer.
 - **Taille et orientation** : pas besoin de les corriger. Le jeu met automatiquement la voiture à sa longueur réelle, la pose au sol et la couche dans le sens de la route. Si elle roule à l'envers, ajoute `rotateY: 180` dans le catalogue.

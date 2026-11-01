@@ -12,25 +12,41 @@ const MODEL_RX = {
   head: /(head.?light|front.?light|phare)/i
 };
 
+/* chargeurs selon le format : GLB / glTF (déjà chargé) ou Collada .dae (chargé à la demande) */
+const COLLADA_URLS = ['https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/TGALoader.js', 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/ColladaLoader.js'];
+let colladaReady = null;
+function loadScript(src) {
+  return new Promise((ok, ko) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = ko; document.head.appendChild(el); });
+}
+function getLoader(file) {
+  if (/\.dae$/i.test(file)) {
+    if (!colladaReady) colladaReady = THREE.ColladaLoader ? Promise.resolve() : COLLADA_URLS.reduce((p, u) => p.then(() => loadScript(u)), Promise.resolve());
+    return colladaReady.then(() => new THREE.ColladaLoader());
+  }
+  return Promise.resolve(THREE.GLTFLoader ? new THREE.GLTFLoader() : null);
+}
 function loadRealModels() {
   for (const car of CARS) modelStatus.set(car.id, 'none');
-  if (!THREE.GLTFLoader) return;
-  const loader = new THREE.GLTFLoader();
   for (const car of CARS) {
     const spec = CAR_MODELS[car.id];
     if (!spec || !spec.file) continue;
     modelStatus.set(car.id, 'loading');
-    loader.load(spec.file, (gltf) => {
-      try {
-        realModels.set(car.id, prepareModel(gltf.scene, car, spec));
-        modelStatus.set(car.id, 'ok');
-        onModelReady(car);
-      } catch (e) { console.warn('Modèle 3D inutilisable pour ' + car.name, e); modelStatus.set(car.id, 'error'); }
-    }, undefined, (e) => {
-      console.warn('Modèle 3D introuvable pour ' + car.name + ' (' + spec.file + '), voiture provisoire utilisée.', e);
+    const fail = (e) => {
+      console.warn('Modèle 3D introuvable ou illisible pour ' + car.name + ' (' + spec.file + '), voiture provisoire utilisée.', e);
       modelStatus.set(car.id, 'error');
       if (state === 'garage') renderGarageUI();
-    });
+    };
+    getLoader(spec.file).then((loader) => {
+      if (!loader) throw new Error('chargeur indisponible');
+      loader.load(spec.file, (res) => {
+        try {
+          // GLB/glTF et Collada renvoient tous deux une scène dans .scene
+          realModels.set(car.id, prepareModel(res.scene, car, spec));
+          modelStatus.set(car.id, 'ok');
+          onModelReady(car);
+        } catch (e) { fail(e); }
+      }, undefined, fail);
+    }).catch(fail);
   }
 }
 
