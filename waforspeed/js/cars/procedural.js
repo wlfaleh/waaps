@@ -268,22 +268,33 @@ function paintMat(hex, hq) {
 }
 /* reflets en temps réel : une petite caméra 360° autour du joueur capte le décor (ciel, néons, immeubles)
    et sert de reflet aux carrosseries, vitres, chromes et à la chaussée mouillée. */
-let cubeRT = null, cubeCam = null, cubeTick = 0;
+let cubeRT = null, cubeCam = null, cubeTick = 0, cubeRTs = null, cubeW = 0;
+/* deux textures de reflet en alternance : on écrit dans l'une pendant que les matériaux lisent l'autre
+   (sinon la carte graphique lit et écrit la même texture : « boucle » et image fausse) */
+const envUsers = () => [...paintMats.values(), MAT.glass, MAT.chrome, MAT.rim].concat(MAT.road && MAT.road.envMap ? [MAT.road] : []);
 function setupReflections() {
-  if (cubeRT || quality !== 'high') return;
-  cubeRT = new THREE.WebGLCubeRenderTarget(isTouch ? 64 : 128, { format: THREE.RGBFormat, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
-  cubeCam = new THREE.CubeCamera(0.5, 900, cubeRT);
+  if (cubeRTs || quality !== 'high') return;
+  const size = isTouch ? 64 : 128;
+  const mk = () => new THREE.WebGLCubeRenderTarget(size, { format: THREE.RGBFormat, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+  cubeRTs = [mk(), mk()];
+  cubeRT = cubeRTs[0]; cubeW = 1;
+  cubeCam = new THREE.CubeCamera(0.5, 900, cubeRTs[1]);
   scene.add(cubeCam);
-  for (const m of [...paintMats.values(), MAT.glass, MAT.chrome, MAT.rim]) { m.envMap = cubeRT.texture; m.needsUpdate = true; }
+  for (const m of envUsers()) { m.envMap = cubeRT.texture; m.needsUpdate = true; }
   MAT.env = cubeRT.texture;
 }
 function updateReflections(at, hideObj) {
   if (!cubeCam || quality !== 'high') return;
   if (++cubeTick % (isTouch ? 10 : 4) !== 0) return;
+  const write = cubeRTs[cubeW], read = cubeRTs[1 - cubeW];
+  cubeCam.renderTarget = write;
   cubeCam.position.set(at.x, at.y + 0.9, at.z);
   if (hideObj) hideObj.visible = false;
   cubeCam.update(renderer, state === 'garage' ? gScene : scene);
   if (hideObj) hideObj.visible = true;
+  // les matériaux lisent désormais la texture fraîche ; la prochaine fois on écrira dans l'autre
+  for (const m of envUsers()) if (m.envMap === read.texture) m.envMap = write.texture;
+  cubeRT = write; MAT.env = write.texture; cubeW = 1 - cubeW;
 }
 function makeCarMaterials() {
   MAT.env = makeEnv();
