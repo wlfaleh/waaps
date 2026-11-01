@@ -19,7 +19,9 @@ function hashStr(str) { let h = 2166136261; for (const ch of str) { h ^= ch.char
 function initRoom() {
   $('#nick').value = nick;
   const c = window.claude;
-  const p = c && typeof c.use === 'function' ? c.use('room') : Promise.resolve(null);
+  // sur claude.ai : capacité « room » ; ailleurs (GitHub Pages…) : connexion directe P2P
+  const p = c && typeof c.use === 'function' ? c.use('room')
+    : loadPeerJs().then((ok) => (ok ? makeP2PRoom() : null));
   Promise.resolve(p).catch(() => null).then((r) => {
     room = r || null; roomState = room ? 'ok' : 'none';
     if (room) room.onPeers(renderOpenRooms, () => { roomState = 'none'; renderLobby(); });
@@ -67,7 +69,7 @@ async function joinRoom(code, host = false) {
   if (!/^[a-z0-9]{4}$/.test(code)) { lobbyNote('Le code fait 4 caractères, par exemple K7QX.', true); return; }
   lobbyNote('Connexion au salon…');
   try { sub = await room.join('wfs-' + code); } catch (e) {
-    sub = null; lobbyNote('Impossible de rejoindre ce salon pour le moment. Réessaie dans quelques secondes.', true); return;
+    sub = null; lobbyNote(e && e.code === 'not_found' ? 'Aucun salon avec ce code. Vérifie les 4 lettres avec ton ami.' : 'Impossible de rejoindre ce salon pour le moment. Réessaie dans quelques secondes.', true); return;
   }
   roomCode = code; round = 0; myStatus = 'lobby'; ghosts.clear(); iAmHost = host;
   sub.presence({ n: nick, st: 'lobby', r: 0, d: 0, x: 0, v: 0, ft: null, car: myCar.id, paint: myPaint().id, host: host || null, map: host ? MAP.id : null, tod: host ? TOD : null, km: host ? duelKm : null }).catch(() => {});
@@ -210,8 +212,8 @@ function renderLobby() {
   for (const b of kr.children) { b.setAttribute('aria-pressed', String(+b.dataset.km === duelKm)); b.disabled = !!sub && !iAmHost; }
   if (!inRoom) {
     if (roomState === 'pending') lobbyNote('Connexion au serveur de jeu…');
-    else if (!can) lobbyNote('Le duel marche quand la page est ouverte sur claude.ai par des personnes connectées qui ont accès au lien. Ici, seule la course solo est disponible.', true);
-    else if (!$('#lobbyNote').classList.contains('warn')) lobbyNote('Chacun ouvre cette page de son côté. L\'un crée un salon, l\'autre le rejoint avec le code.');
+    else if (!can) lobbyNote(window.claude ? 'Le duel marche quand la page est ouverte sur claude.ai par des personnes connectées qui ont accès au lien. Ici, seule la course solo est disponible.' : 'Le service de connexion en ligne ne répond pas. Vérifie ta connexion internet puis recharge la page.', true);
+    else if (!$('#lobbyNote').classList.contains('warn')) lobbyNote(room && room.p2p ? 'L\'un crée un salon, puis envoie le code à 4 lettres à l\'autre, qui le tape ci-dessus et clique sur Rejoindre.' : 'Chacun ouvre cette page de son côté. L\'un crée un salon, l\'autre le rejoint avec le code.');
     return;
   }
   $('#roomCode').textContent = roomCode.toUpperCase();
