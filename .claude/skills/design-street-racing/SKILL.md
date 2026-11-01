@@ -91,4 +91,6 @@ Règles :
 - [ ] Animations ≤ 350 ms et `prefers-reduced-motion` géré
 - [ ] Contrastes vérifiés, rendu correct à 375 px de large
 
+Pour tout ce qui est rendu 3D (voitures, décors, lumière, caméra, performances, vrais modèles), suivre aussi le skill `waforspeed-3d`. Le style néon s'y traduit par : nuit = émissifs + bloom, un accent néon dominant par scène, reflets sur l'asphalte mouillé.
+
 Les tokens CSS prêts à copier et des exemples de composants sont dans `tokens.md`.
