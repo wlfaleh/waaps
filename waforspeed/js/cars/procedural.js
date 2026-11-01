@@ -118,18 +118,23 @@ function buildModel(car) {
   const tire = new THREE.CylinderGeometry(d.rw, d.rw, 0.24, 22); tire.rotateZ(Math.PI / 2);
   const rim = new THREE.CylinderGeometry(d.rw * 0.66, d.rw * 0.66, 0.246, 20); rim.rotateZ(Math.PI / 2);
   const hub = new THREE.CylinderGeometry(0.05, 0.05, 0.26, 10); hub.rotateZ(Math.PI / 2);
-  for (const sx of [-1, 1]) for (const az of [-wf, -wr]) {
-    const x = sx * (d.W / 2 - 0.15);
-    part('tire', tire.clone().translate(x, d.rw, az));
-    part('rim', rim.clone().translate(x, d.rw, az));
-    part('chrome', hub.clone().translate(x, d.rw, az));
+  // roues séparées de la carrosserie (centrées sur leur axe) pour pouvoir braquer et tourner
+  const wheelGeo = {};
+  for (const sx of [-1, 1]) {
+    const wb = {};
+    const wp = (k, g) => { (wb[k] = wb[k] || []).push(g); };
+    wp('tire', tire.clone()); wp('rim', rim.clone()); wp('chrome', hub.clone());
     for (let k = 0; k < 5; k++) {
       const sp = new THREE.BoxGeometry(0.02, d.rw * 1.22, 0.06);
       sp.rotateX(k * Math.PI * 2 / 5);
-      sp.translate(x + sx * 0.124, d.rw, az);
-      part('chrome', sp);
+      sp.translate(sx * 0.124, 0, 0);
+      wp('chrome', sp);
     }
+    wheelGeo[sx] = {};
+    for (const k in wb) wheelGeo[sx][k] = mergeGeos(wb[k]);
   }
+  const wheelPos = [];
+  for (const sx of [-1, 1]) for (const [az, front] of [[-wf, true], [-wr, false]]) wheelPos.push({ x: sx * (d.W / 2 - 0.15), y: d.rw, z: az, side: sx, front });
   // signatures lumineuses
   const Z = (front) => (front ? -(d.L / 2 + 0.012) : d.L / 2 + 0.012);
   const pair = (k, w, h, xo, y, front, dz = 0.03) => { for (const s of [-1, 1]) bx(k, w, h, dz, s * xo, y, Z(front)); };
@@ -198,7 +203,7 @@ function buildModel(car) {
   }
   const geos = {};
   for (const k in bk) geos[k] = mergeGeos(bk[k]);
-  const out = { geos, L: d.L, W: d.W };
+  const out = { geos, L: d.L, W: d.W, wheelGeo, wheelPos, rw: d.rw };
   modelCache.set(car.id, out);
   return out;
 }
@@ -245,5 +250,13 @@ function proceduralBody(car, paintHex, opts = {}) {
   const mats = { paint: paintMat(paintHex, opts.hq), roof: paintMat(car.roof || paintHex, opts.hq), glass: MAT.glass, trim: MAT.trim, seat: MAT.seat,
     chrome: MAT.chrome, rim: MAT.rim, tire: MAT.tire, head: MAT.head, tail, plate: MAT.plate };
   for (const k in m.geos) obj.add(new THREE.Mesh(m.geos[k], mats[k]));
-  return { object: obj, setBrake: opts.tailMat ? (on) => tail.color.set(on ? 0xff8098 : 0xff4868) : null };
+  const wheels = [];
+  for (const w of m.wheelPos) {
+    const steerG = new THREE.Group(); steerG.position.set(w.x, w.y, w.z);
+    const spinG = new THREE.Group(); steerG.add(spinG);
+    for (const k in m.wheelGeo[w.side]) spinG.add(new THREE.Mesh(m.wheelGeo[w.side][k], mats[k]));
+    obj.add(steerG);
+    wheels.push({ steer: steerG, spin: spinG, front: w.front });
+  }
+  return { object: obj, wheels, rw: m.rw, setBrake: opts.tailMat ? (on) => tail.color.set(on ? 0xff8098 : 0xff4868) : null };
 }

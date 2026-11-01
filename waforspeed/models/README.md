@@ -26,6 +26,7 @@ Puis, dans `js/cars/catalog.js`, remplace `file: null` par le chemin du fichier 
 ## Couleurs et feux
 
 - Le jeu repeint la carrosserie avec la couleur choisie au garage s'il trouve un matériau dont le nom contient `paint`, `body`, `carpaint`… Si le nom est différent, indique-le avec `paint: 'NomDuMateriau'`. Pour garder la couleur d'origine du modèle : `repaint: false`.
+- Les roues braquent et tournent si chaque roue est un objet séparé dont le nom contient `wheel`, `roue` ou `tire` (ex. `Wheel_FL`). Si les noms sont différents, indique le motif avec `wheel: '...'` dans le catalogue.
 - Les feux arrière s'allument au freinage si leur matériau contient `tail`, `brake` ou `rear_light`, ou le nom donné avec `tail: '...'`.
 
 ## Licence

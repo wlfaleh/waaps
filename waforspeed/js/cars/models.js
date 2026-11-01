@@ -90,10 +90,42 @@ function realBody(car, paintHex, opts) {
     });
     o.material = arr ? mats : mats[0];
   });
+  const { wheels, rw } = rigWheels(obj, car);
   return {
-    object: obj,
+    object: obj, wheels, rw,
     setBrake: (on) => { for (const t of tails) if (t.emissive) { t.emissive.set(0xff2040); t.emissiveIntensity = on ? 2.5 : 0.7; } }
   };
+}
+
+/* Roues d'un vrai modèle : on repère les nœuds nommés « wheel », « roue », « tire »…
+   et on les accroche à un pivot (braquage) puis à un axe (rotation). Sans nœud de roue,
+   la voiture roule simplement sans animation de roues. */
+const WHEEL_RX = /(wheel|roue|tire|tyre|pneu)/i;
+function rigWheels(obj, car) {
+  const spec = CAR_MODELS[car.id] || {};
+  const rx = spec.wheel ? new RegExp(spec.wheel, 'i') : WHEEL_RX;
+  const found = [];
+  obj.traverse((o) => {
+    if (!rx.test(o.name || '')) return;
+    for (let p = o.parent; p; p = p.parent) if (found.includes(p)) return;
+    found.push(o);
+  });
+  obj.updateMatrixWorld(true);
+  const wheels = [];
+  let rw = car.d.rw;
+  for (const node of found) {
+    const box = new THREE.Box3().setFromObject(node);
+    if (box.isEmpty()) continue;
+    const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+    if (sz.y > 1.2 || sz.y < 0.2) continue;
+    rw = sz.y / 2;
+    const steerG = new THREE.Group(); steerG.position.copy(c);
+    const spinG = new THREE.Group(); steerG.add(spinG);
+    obj.add(steerG); obj.updateMatrixWorld(true);
+    spinG.attach(node);
+    wheels.push({ steer: steerG, spin: spinG, front: c.z < 0 });
+  }
+  return { wheels, rw };
 }
 
 /* Point d'entrée unique : construit une voiture (vraie ou provisoire) prête à poser sur la piste. */
@@ -113,7 +145,14 @@ function makeCarMesh(car, paintHex, opts = {}) {
     const ug = new THREE.Mesh(glowGeo, new THREE.MeshBasicMaterial({ map: TEXS.radial, color: new THREE.Color(opts.glow), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
     ug.scale.set(Wd * 2.2, 1, L * 1.35); ug.position.y = 0.04; g.add(ug);
   }
-  g.userData = { inner, len: L, setBrake: body.setBrake || (() => {}) };
+  const wheels = body.wheels || [], rw = body.rw || car.d.rw;
+  g.userData = {
+    inner, len: L, setBrake: body.setBrake || (() => {}),
+    /* braquage des roues avant (radians, + = à droite) et distance parcourue (mètres) */
+    animWheels: (steerAngle, meters) => {
+      for (const w of wheels) { if (w.front) w.steer.rotation.y = -steerAngle; w.spin.rotation.x -= meters / rw; }
+    }
+  };
   return g;
 }
 let shadowGeo = null, glowGeo = null;

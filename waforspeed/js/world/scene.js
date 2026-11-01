@@ -61,6 +61,7 @@ function syncGhostMeshes() {
 
 /* --- placement d'un objet sur la piste --- */
 const TP = {};
+let playerYaw = 0, prevPlayerX = 0;
 function placeOnTrack(obj, sAbs, offset, yaw = 0, roll = 0) {
   trackPoint(sAbs, offset * RW, TP);
   obj.position.set(TP.x, TP.y + 0.15 * 0, TP.z);
@@ -96,9 +97,15 @@ function render3D(dt, t) {
   ensureChunks(sP, false);
   // joueur
   const sp = speed / MAX_SPEED;
-  placeOnTrack(playerMesh, sP, playerX, steer * 0.12);
+  // la voiture pointe là où elle va : vitesse latérale comparée à la vitesse d'avance
+  const dX = playerX - prevPlayerX; prevPlayerX = playerX;
+  const latVel = Math.abs(dX) > 0.3 ? 0 : dX * RW / Math.max(dt, 1e-3);
+  const targetYaw = clamp(Math.atan2(latVel, Math.max(speed * M, 3)), -0.42, 0.42) + steer * 0.04 * Math.min(1, sp * 2);
+  playerYaw += (targetYaw - playerYaw) * Math.min(1, dt * 9);
+  placeOnTrack(playerMesh, sP, playerX, playerYaw);
   const inner = playerMesh.userData.inner;
-  inner.rotation.z = -steer * 0.035 * Math.min(1, sp + 0.2);
+  inner.rotation.z = steer * 0.045 * Math.min(1, sp + 0.15);
+  playerMesh.userData.animWheels(steer * (0.55 - 0.3 * Math.min(sp, 1)), speed * M * dt);
   inner.rotation.x = reduceMotion ? 0 : (braking ? -0.012 : 0) + Math.sin(t * 0.03) * 0.002 * sp;
   inner.position.y = reduceMotion ? 0 : Math.sin(t * 0.045) * 0.008 * sp;
   playerMesh.userData.setBrake(braking);
@@ -109,7 +116,10 @@ function render3D(dt, t) {
     const m = trafficMesh(car);
     if (rel < -20 / M || rel > (VIEW * SEG_M + 30) / M) { m.visible = false; continue; }
     m.visible = true;
-    placeOnTrack(m, sP + rel, car.offset, (car.offset - car.prevOff) * 2);
+    const lat = (car.offset - car.prevOff) * RW / Math.max(dt, 1e-3);
+    const yaw = clamp(Math.atan2(lat, car.speed * M), -0.3, 0.3);
+    placeOnTrack(m, sP + rel, car.offset, yaw);
+    m.userData.animWheels(yaw * 1.6, car.speed * M * dt);
     car.prevOff = car.offset;
   }
   // rivaux
@@ -119,7 +129,10 @@ function render3D(dt, t) {
     if (!gm) continue;
     const rel = g.rd - sP;
     gm.mesh.visible = !g.done && rel > -40 / M && rel < (VIEW * SEG_M) / M;
-    if (gm.mesh.visible) placeOnTrack(gm.mesh, g.rd, g.x);
+    const moved = Math.max(0, g.rd - (gm.prevRd ?? g.rd)) * M, dx = g.x - (gm.prevX ?? g.x);
+    gm.prevRd = g.rd; gm.prevX = g.x;
+    gm.yaw = (gm.yaw || 0) + (clamp(Math.atan2(dx * RW, Math.max(moved, 0.05)), -0.42, 0.42) - (gm.yaw || 0)) * Math.min(1, dt * 8);
+    if (gm.mesh.visible) { placeOnTrack(gm.mesh, g.rd, g.x, gm.yaw); gm.mesh.userData.animWheels(gm.yaw * 1.4, moved); }
   }
   // repère
   if (mode === 'solo' && state === 'play') setGantry(`CHECKPOINT ${level + 1}`, '#00E5FF', nextCp);
