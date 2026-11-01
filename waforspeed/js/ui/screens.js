@@ -191,9 +191,21 @@ $('#resumeBtn').addEventListener('click', resumeGame);
 $('#quitBtn').addEventListener('click', toMenu);
 function setQualityLabel() { $('#qualityBtn').textContent = 'Graphismes : ' + (quality === 'high' ? 'haute' : 'rapide'); }
 $('#qualityBtn').addEventListener('click', () => {
-  quality = quality === 'high' ? 'low' : 'high'; store('waforspeed-quality', quality); setQualityLabel();
-  if (renderer) { setFog(); setupComposer(); onResize(); clearChunks(); ensureChunks(dist, true); clearTrafficMeshes(); }
+  setQuality(quality === 'high' ? 'low' : 'high', true);
 });
+function setQuality(q, byUser) {
+  quality = q; if (byUser) store('waforspeed-quality', quality); setQualityLabel();
+  if (renderer) { setupComposer(); onResize(); applyEnv(); clearChunks(); ensureChunks(dist, true); clearTrafficMeshes(); }
+}
+let perfT = 0, perfN = 0, perfDone = qualityChosen;
+function watchPerf(raw) {
+  if (perfDone || state !== 'play' || quality !== 'high') return;
+  perfT += raw; perfN++;
+  if (perfT >= 5) {
+    perfDone = true;
+    if (perfN / perfT < 30) { setQuality('low', false); toast('Graphismes rapides', 'pour plus de fluidité', 'cp'); }
+  }
+}
 
 /* ---------- Radio ---------- */
 function renderRadio() {

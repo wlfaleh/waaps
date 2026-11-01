@@ -94,8 +94,9 @@ function updateCamera(dt, sP) {
   sunDisc.position.set(camera.position.x + sd[0] * 900, camera.position.y + sd[1] * 900, camera.position.z + sd[2] * 900);
   moonDisc.position.copy(sunDisc.position);
   stars.position.copy(camera.position); clouds.position.set(camera.position.x, camera.position.y, camera.position.z);
-  sunLight.position.set(camera.position.x + sd[0] * 100, camera.position.y + sd[1] * 100, camera.position.z + sd[2] * 100);
-  sunLight.target.position.copy(camera.position);
+  const sp = playerMesh ? playerMesh.position : camera.position;
+  sunLight.target.position.set(sp.x, sp.y, sp.z);
+  sunLight.position.set(sp.x + sd[0] * 120, sp.y + sd[1] * 120, sp.z + sd[2] * 120);
   water.position.set(camera.position.x, -1.6, camera.position.z);
 }
 

@@ -10,6 +10,7 @@ function frame(t) {
   const dt = raw * timeScale;
   lastT = t;
   update(dt);
+  watchPerf(raw);
   if (renderer) render3D(dt, t);
   if (state === 'play' || state === 'pause' || state === 'over' || state === 'count') updateHud();
   engineUpdate();
