@@ -172,6 +172,43 @@ function makeTextures() {
     for (let i = 0; i < 9000; i++) { const v = 150 + R() * 105 | 0; g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(R() * 256, R() * 256, 1 + (R() < 0.2), 1 + (R() < 0.2)); }
     TEXS.detail = canvasTex(c, true);
   }
+  // relief de l'asphalte (carte de normales) : grain, fissures, raccords
+  {
+    const N = 512, [hc, hg] = makeCanvas(N, N), R = mulberry32(44);
+    hg.fillStyle = '#808080'; hg.fillRect(0, 0, N, N);
+    for (let i = 0; i < 26000; i++) { const v = 100 + R() * 120 | 0; hg.fillStyle = `rgb(${v},${v},${v})`; hg.fillRect(R() * N, R() * N, 1 + (R() < 0.3), 1 + (R() < 0.3)); }
+    hg.strokeStyle = 'rgba(40,40,40,.8)'; hg.lineWidth = 1.5;
+    for (let i = 0; i < 6; i++) { hg.beginPath(); let x = R() * N, y = R() * N; hg.moveTo(x, y); for (let k = 0; k < 8; k++) { x += (R() - 0.5) * 40; y += R() * 30; hg.lineTo(x, y); } hg.stroke(); }
+    const h = hg.getImageData(0, 0, N, N).data, [nc, ng] = makeCanvas(N, N), out = ng.createImageData(N, N);
+    const H = (x, y) => h[(((y + N) % N) * N + ((x + N) % N)) * 4] / 255;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const dx = (H(x + 1, y) - H(x - 1, y)) * 2.2, dy = (H(x, y + 1) - H(x, y - 1)) * 2.2, l = Math.hypot(dx, dy, 1), o = (y * N + x) * 4;
+      out.data[o] = (-dx / l * 0.5 + 0.5) * 255; out.data[o + 1] = (-dy / l * 0.5 + 0.5) * 255; out.data[o + 2] = (1 / l * 0.5 + 0.5) * 255; out.data[o + 3] = 255;
+    }
+    ng.putImageData(out, 0, 0);
+    TEXS.roadNormal = canvasTex(nc, true);
+    TEXS.roadNormal.repeat.set(3, 1);
+  }
+  // dalles de trottoir (2 x 2 dalles par répétition de 3 m)
+  {
+    const [c, g] = makeCanvas(256, 256), R = mulberry32(15);
+    g.fillStyle = '#d6d6d6'; g.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) {
+      const v = 205 + R() * 40 | 0; g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(x * 128 + 3, y * 128 + 3, 122, 122);
+      for (let i = 0; i < 500; i++) { const w = 180 + R() * 70 | 0; g.fillStyle = `rgb(${w},${w},${w})`; g.fillRect(x * 128 + 3 + R() * 122, y * 128 + 3 + R() * 122, 1, 1); }
+    }
+    g.fillStyle = '#7a7a7a'; for (const k of [0, 128]) { g.fillRect(k, 0, 3, 256); g.fillRect(0, k, 256, 3); }
+    TEXS.paving = canvasTex(c, true);
+  }
+  // jante floue (rayons en mouvement)
+  {
+    const [c, g] = makeCanvas(128, 128);
+    const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(160,165,175,.95)'); gr.addColorStop(0.18, 'rgba(60,62,68,.95)'); gr.addColorStop(0.3, 'rgba(150,155,165,.8)');
+    gr.addColorStop(0.8, 'rgba(130,135,145,.75)'); gr.addColorStop(0.92, 'rgba(200,205,215,.95)'); gr.addColorStop(1, 'rgba(200,205,215,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+    TEXS.wheelBlur = canvasTex(c);
+  }
   // halo radial
   {
     const [c, g] = makeCanvas(128, 128);
@@ -253,6 +290,8 @@ function setupThree() {
 
   MAT.road = new THREE.MeshStandardMaterial({ map: TEXS.road, roughness: 0.55, metalness: 0.2, color: 0xffffff });
   MAT.side = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05, map: TEXS.detail });
+  MAT.walk = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.02, map: TEXS.paving });
+  MAT.road.normalMap = TEXS.roadNormal; MAT.road.normalScale = new THREE.Vector2(0.55, 0.55);
   MAT.bld = new THREE.MeshBasicMaterial({ map: TEXS.facade, vertexColors: true });
   MAT.bldDay = new THREE.MeshLambertMaterial({ map: TEXS.facadeDay, vertexColors: true });
   MAT.ads = TEXS.ads.map((t) => new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }));
@@ -352,7 +391,11 @@ function applyEnv() {
   MAT.shadow.opacity = shadows ? 0.35 : 0.75;
   sunDisc.visible = E.sunDisc; moonDisc.visible = E.moon; stars.visible = E.stars; clouds.visible = E.clouds;
   water.visible = MAP.ground === 'beach'; water.material.color.set(E.water);
-  MAT.road.map = MAP.road === 'circuit' ? TEXS.roadCircuit : TOD === 'jour' ? TEXS.roadDay : TEXS.road; MAT.road.needsUpdate = true;
+  MAT.road.map = MAP.road === 'circuit' ? TEXS.roadCircuit : TOD === 'jour' ? TEXS.roadDay : TEXS.road;
+  const wet = TOD === 'nuit' && (MAP.ground === 'city' || MAP.ground === 'beach');
+  MAT.road.roughness = wet ? 0.2 : 0.62; MAT.road.metalness = wet ? 0.45 : 0.1;
+  MAT.road.envMap = wet && cubeRT ? cubeRT.texture : null; MAT.road.envMapIntensity = 0.85;
+  MAT.road.needsUpdate = true;
   MAT.neon.color.setScalar(E.neonK);
   MAT.pool.opacity = E.poolK;
   for (const l of lampLights) l.visible = E.lamps;
@@ -406,7 +449,7 @@ function worldUV(geo) {
 }
 function buildChunk(ci) {
   const a0 = ci * CH, a1 = a0 + CH;
-  const road = newBuf(), side = newBuf(), bld = newBuf(), neon = newBuf(), pool = newBuf();
+  const road = newBuf(), side = newBuf(), bld = newBuf(), neon = newBuf(), pool = newBuf(), walk = newBuf();
   const group = new THREE.Group();
   const ctx = { side, bld, neon, pool, group, rotors: [] };
   const profiles = { '-1': GROUND[MAP.ground](-1), '1': GROUND[MAP.ground](1) };
@@ -425,7 +468,7 @@ function buildChunk(ci) {
       for (const st of profiles[s]) {
         const col = typeof st.col === 'function' ? st.col(a, s) : st.col;
         if (st.curb) quad(side, lateral(p0, st.a * s), lateral(p1, st.a * s), lateral(p1, st.a * s, st.ya), lateral(p0, st.a * s, st.ya), col, null, [-Math.cos(p0.th) * s, 0, -Math.sin(p0.th) * s]);
-        quad(side, lateral(p0, st.a * s, st.ya), lateral(p1, st.a * s, st.ya), lateral(p1, st.b * s, st.yb), lateral(p0, st.b * s, st.yb), col, null, [0, 1, 0]);
+        quad(st.walk ? walk : side, lateral(p0, st.a * s, st.ya), lateral(p1, st.a * s, st.ya), lateral(p1, st.b * s, st.yb), lateral(p0, st.b * s, st.yb), col, null, [0, 1, 0]);
       }
     }
     const deco = segAt(a).deco;
@@ -441,6 +484,8 @@ function buildChunk(ci) {
   add(road, MAT.road, true, false, true);
   const sm = add(side, MAT.side, false, true, true);
   if (sm) worldUV(sm.geometry);
+  const wm = add(walk, MAT.walk, false, false, true);
+  if (wm) worldUV(wm.geometry);
   add(bld, ENV.windowsLit ? MAT.bld : MAT.bldDay, true, true, !ENV.windowsLit); add(neon, MAT.neon, false);
   if (ENV.poolK > 0) add(pool, MAT.pool, true);
   group.userData.rotors = ctx.rotors;

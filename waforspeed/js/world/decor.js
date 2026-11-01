@@ -28,6 +28,11 @@ function generateDecor(map) {
         neon: D() < 0.4 ? (D() < 0.5 ? '#00E5FF' : '#FF6A00') : null, sign: D() < 0.3 });
     }
     for (let n = 12; n < len; n += 24) lamp(n, (n / 24 | 0) % 2 ? 1 : -1, 'city');
+    for (let n = 40; n < len; n += 150) item(n, { t: 'zebra' });
+    for (const side of [-1, 1]) for (let n = side < 0 ? 4 : 10; n < len; n += 16) {
+      if (segments[n].deco.lamp || segments[(n + 1) % len].deco.lamp || D() < 0.15) continue;
+      item(n, { t: 'streettree', side, lat: RW + 3.6, h: 5 + D() * 2.5 }); collide(n, side * (RW + 3.6), 0.08);
+    }
     for (let n = 75; n < len - 40; n += 140 + Math.floor(D() * 60)) {
       const side = D() < 0.5 ? -1 : 1;
       if (segments[n].deco.lamp) continue;
@@ -45,6 +50,7 @@ function generateDecor(map) {
     }
     for (let n = 9; n < len; n += 14 + Math.floor(D() * 8)) item(n, { t: 'palm', side: -1, lat: RW + 5 + D() * 3, h: 6 + D() * 4, lean: (D() - 0.5) * 0.4, rot: D() * 6 });
     for (let n = 15; n < len; n += 30) lamp(n, 1, 'beach');
+    for (let n = 70; n < len; n += 200) item(n, { t: 'zebra' });
     for (let n = 90; n < len - 40; n += 180 + Math.floor(D() * 60)) { item(n, { t: 'board', side: -1, text: Math.floor(D() * BOARD_TEXTS.length) }); collide(n, -(RW + 1), 0.15); }
   } else if (map.ground === 'country') {
     for (const side of [-1, 1]) {
@@ -76,7 +82,7 @@ function generateDecor(map) {
 /* ---------- bas-côtés : bandes depuis le bord de la route ----------
    a, b : distance au centre (m) ; ya, yb : hauteurs ; col : couleur ou fonction(a, s) */
 const GCOL = {
-  kerbA: hex3('#8a3a08'), kerbB: hex3('#2a2420'), walk: hex3('#5e5c5a'), cityGround: hex3('#3a3a3c'),
+  kerbA: hex3('#8a3a08'), kerbB: hex3('#2a2420'), walk: hex3('#8a8884'), cityGround: hex3('#3a3a3c'),
   white: hex3('#e8e8e8'), grey: hex3('#9a9a9a'), prom: hex3('#b8ab8c'), sand: hex3('#cdb683'), wet: hex3('#a38d60'),
   dune: hex3('#9aa65e'), hill: hex3('#7a8a4c'), verge: hex3('#6d8a3a'), ditch: hex3('#4f6b2b'), farHill: hex3('#6c8a3e'),
   red: hex3('#d81e24'), grass: hex3('#4f7f32'), grass2: hex3('#4a7a2e')
@@ -86,17 +92,17 @@ const fieldCol = (a, s) => FIELDS[(mulberry32(Math.floor(a / 70) * 7 + (s > 0 ? 
 const GROUND = {
   city: (s) => [
     { a: RW, b: RW + 0.5, ya: 0.15, yb: 0.15, col: (a) => (Math.floor(a / RUMBLE) % 2 ? GCOL.kerbA : GCOL.kerbB), curb: true },
-    { a: RW + 0.5, b: RW + 6, ya: 0.15, yb: 0.15, col: GCOL.walk },
+    { a: RW + 0.5, b: RW + 6, ya: 0.15, yb: 0.15, col: GCOL.walk, walk: true },
     { a: RW + 6, b: RW + 70, ya: 0.15, yb: -0.3, col: GCOL.cityGround }
   ],
   beach: (s) => s > 0 ? [
     { a: RW, b: RW + 0.4, ya: 0.1, yb: 0.1, col: (a) => (Math.floor(a / RUMBLE) % 2 ? GCOL.white : GCOL.grey), curb: true },
-    { a: RW + 0.4, b: RW + 5, ya: 0.1, yb: 0.1, col: GCOL.prom },
+    { a: RW + 0.4, b: RW + 5, ya: 0.1, yb: 0.1, col: GCOL.prom, walk: true },
     { a: RW + 5, b: RW + 38, ya: 0.05, yb: -1.1, col: GCOL.sand },
     { a: RW + 38, b: RW + 48, ya: -1.1, yb: -1.9, col: GCOL.wet }
   ] : [
     { a: RW, b: RW + 0.4, ya: 0.1, yb: 0.1, col: (a) => (Math.floor(a / RUMBLE) % 2 ? GCOL.white : GCOL.grey), curb: true },
-    { a: RW + 0.4, b: RW + 3, ya: 0.1, yb: 0.1, col: GCOL.prom },
+    { a: RW + 0.4, b: RW + 3, ya: 0.1, yb: 0.1, col: GCOL.prom, walk: true },
     { a: RW + 3, b: RW + 30, ya: 0.1, yb: 1.6, col: GCOL.dune },
     { a: RW + 30, b: RW + 170, ya: 1.6, yb: 30, col: GCOL.hill }
   ],
@@ -297,6 +303,21 @@ const DECOR = {
       box(ctx.side, bb, r, f, 10, 6, 14, C.barnRed);
       addGeo(ctx.side, P.roof, [bb[0], bb[1] + 6 + 1.4, bb[2]], -p.th, C.roofs[2], [10.6, 2.8, 14.6]);
     }
+  },
+  zebra(ctx, it, p, a) {
+    // passage piéton : bandes blanches parallèles à la route
+    const p1 = pose(a + 3);
+    for (let k = 0; k < 8; k++) {
+      const x0 = -RW + 0.6 + k * (2 * RW - 1.2) / 8, x1 = x0 + 0.95;
+      quad(ctx.side, lateral(p, x0, 0.015), lateral(p, x1, 0.015), lateral(p1, x1, 0.015), lateral(p1, x0, 0.015), hex3('#e9e9e6'), null, [0, 1, 0]);
+    }
+  },
+  streettree(ctx, it, p) {
+    const P = prims(), b = lateral(p, it.side * it.lat, 0.15), [r, f] = axes(p.th);
+    box(ctx.side, [b[0], b[1] - 0.02, b[2]], r, f, 1.3, 0.05, 1.3, hex3('#3a3b3e'));
+    addGeo(ctx.side, P.cyl, b, 0, C.trunk, [0.14, it.h * 0.5, 0.14]);
+    addGeo(ctx.side, P.ball1, [b[0], b[1] + it.h * 0.68, b[2]], it.h, C.leaf2, [it.h * 0.3, it.h * 0.34, it.h * 0.3]);
+    addGeo(ctx.side, P.ball, [b[0] + 0.4, b[1] + it.h * 0.85, b[2] - 0.3], 0.5, C.leaf, [it.h * 0.2, it.h * 0.2, it.h * 0.2]);
   },
   bales(ctx, it, p) {
     const P = prims(), [r, f] = axes(p.th), b = lateral(p, it.side * it.lat, groundY(it.side, it.lat));

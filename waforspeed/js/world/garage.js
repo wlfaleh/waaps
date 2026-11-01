@@ -37,6 +37,7 @@ function setGarageCar() {
 }
 function renderGarage(dt) {
   if (!gDrag && !reduceMotion) gYaw += dt * 0.35;
+  if (gCar) updateReflections(gCar.position, gCar);
   if (gCar) { gCar.rotation.y = gYaw; if (!reduceMotion) gCar.userData.animWheels(Math.sin(performance.now() / 900) * 0.4, 0); }
   const narrow = W < 760;
   const portrait = W < H;

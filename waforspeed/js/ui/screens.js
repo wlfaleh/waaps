@@ -195,7 +195,7 @@ $('#qualityBtn').addEventListener('click', () => {
 });
 function setQuality(q, byUser) {
   quality = q; if (byUser) store('waforspeed-quality', quality); setQualityLabel();
-  if (renderer) { setupComposer(); onResize(); applyEnv(); clearChunks(); ensureChunks(dist, true); clearTrafficMeshes(); }
+  if (renderer) { setupComposer(); setupReflections(); onResize(); applyEnv(); clearChunks(); ensureChunks(dist, true); clearTrafficMeshes(); }
 }
 let perfT = 0, perfN = 0, perfDone = qualityChosen;
 function watchPerf(raw) {

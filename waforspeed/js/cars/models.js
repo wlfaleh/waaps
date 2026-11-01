@@ -169,12 +169,18 @@ function makeCarMesh(car, paintHex, opts = {}) {
     setIndicators: (left, right) => { setLamp(blinkers.left, left); setLamp(blinkers.right, right); }, setBrake: body.setBrake || (() => {}),
     /* braquage des roues avant (radians, + = à droite) et distance parcourue (mètres) */
     animWheels: (steerAngle, meters) => {
-      for (const w of wheels) { if (w.front) w.steer.rotation.y = -steerAngle; w.spin.rotation.x -= meters / rw; }
+      const blurK = clamp((Math.abs(meters) / Math.max(1e-3, lastDt) - 6) / 14, 0, 0.92);
+      for (const w of wheels) {
+        if (w.front) w.steer.rotation.y = -steerAngle;
+        w.spin.rotation.x -= meters / rw;
+        if (w.blur) { w.blur.material.opacity = blurK; w.blur.rotation.z += meters / rw * 0.05; }
+      }
     }
   };
   return g;
 }
-let shadowGeo = null, glowGeo = null, blinkGeo = null;
+let shadowGeo = null, glowGeo = null, blinkGeo = null, blurGeo = null;
+let lastDt = 1 / 60;
 
 /* Un vrai modèle vient d'arriver : on remplace les voitures provisoires déjà affichées. */
 function onModelReady(car) {
