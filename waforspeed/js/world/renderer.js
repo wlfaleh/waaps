@@ -279,6 +279,9 @@ function textCanvas(text, col, w, h, font, bg = '#0b0c14') {
 
 function setupThree() {
   renderer = new THREE.WebGLRenderer({ canvas: $('#game'), antialias: true, powerPreference: 'high-performance' });
+  // perte du contexte WebGL (mémoire GPU saturée, onglet en arrière-plan sur mobile) : pause, puis on recharge proprement
+  $('#game').addEventListener('webglcontextlost', (e) => { e.preventDefault(); if (typeof pauseGame === 'function') pauseGame(); });
+  $('#game').addEventListener('webglcontextrestored', () => { if (mode === 'solo') location.reload(); });
   // ombres portées douces (soleil de jour)
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -420,7 +423,7 @@ function setupComposer() {
 }
 function onResize() {
   W = innerWidth; H = innerHeight;
-  DPR = Math.min(window.devicePixelRatio || 1, quality === 'high' ? (isTouch ? 2 : 1.75) : 1.25);
+  DPR = Math.min(window.devicePixelRatio || 1, quality === 'high' ? (isTouch ? 1.5 : 1.75) : 1.25);   // mobile : 1.5 max (coût x2 au-delà)
   if (renderer) {
     renderer.setPixelRatio(DPR);
     renderer.setSize(W, H, false);
