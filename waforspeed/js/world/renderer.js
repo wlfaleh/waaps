@@ -321,7 +321,7 @@ function setupThree() {
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
     skyGeo = g;
-    sky = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+    sky = new THREE.Mesh(g, makeSkyMaterial());
     sky.renderOrder = -2; scene.add(sky);
     TEXS.skyline.repeat.set(4, 1);
     skyline = new THREE.Mesh(new THREE.CylinderGeometry(820, 820, 190, 64, 1, true),
@@ -358,6 +358,48 @@ function setupThree() {
   buildGarage();
   onResize();
 }
+/* Ciel : dégradé atmosphérique + halo du soleil + nuages procéduraux (bruit fractal projeté sur une voûte).
+   Un seul dessin pour tout le ciel ; les nuages défilent lentement avec le vent et sont éclairés côté soleil. */
+function makeSkyMaterial() {
+  const oct = quality === 'high' && !isTouch ? 6 : 4;
+  return new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: {
+      uTop: { value: new THREE.Color('#2a64b8') }, uMid: { value: new THREE.Color('#74ace0') }, uHor: { value: new THREE.Color('#d4e6f2') },
+      uSun: { value: new THREE.Vector3(-0.45, 0.75, -0.5).normalize() }, uSunCol: { value: new THREE.Color('#fff0d4') },
+      uCloud: { value: 1 }, uCover: { value: 0.5 }, uTime: { value: 0 }, uNight: { value: 0 }
+    },
+    vertexShader: 'varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `
+      precision mediump float;
+      varying vec3 vDir;
+      uniform vec3 uTop, uMid, uHor, uSun, uSunCol; uniform float uCloud, uCover, uTime, uNight;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
+      float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int i = 0; i < ${oct}; i++) { v += a * noise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; } return v; }
+      void main() {
+        vec3 d = normalize(vDir); float h = d.y;
+        // dégradé : horizon laiteux, zénith profond
+        vec3 col = h > 0.25 ? mix(uMid, uTop, clamp((h - 0.25) / 0.6, 0.0, 1.0)) : mix(uHor, uMid, clamp((h + 0.05) / 0.3, 0.0, 1.0));
+        float mu = max(dot(d, uSun), 0.0);
+        col += uSunCol * (pow(mu, 6.0) * 0.18 + pow(mu, 60.0) * 0.35) * (1.0 - uNight);
+        if (uCloud > 0.0 && h > 0.0) {
+          vec2 uv = d.xz / (h + 0.18) * 1.6 + vec2(uTime * 0.012, uTime * 0.004);
+          float n = fbm(uv);
+          float c = smoothstep(uCover, uCover + 0.28, n) * smoothstep(0.0, 0.16, h);
+          // éclairage : on compare avec le bruit un peu plus loin vers le soleil (bords lumineux, ventre gris)
+          float n2 = fbm(uv + uSun.xz * 0.14);
+          float lit = clamp(0.62 + (n - n2) * 3.2, 0.0, 1.0);
+          vec3 shadowC = mix(vec3(0.58, 0.63, 0.72), uHor * 0.8, 0.3), litC = mix(vec3(1.0), uSunCol, 0.25);
+          vec3 cc = mix(shadowC, litC, lit) + uSunCol * pow(mu, 12.0) * 0.4 * (1.0 - c);
+          if (uNight > 0.5) cc = mix(uMid, uHor, 0.5) * 0.9;
+          col = mix(col, cc, c * uCloud);
+        }
+        gl_FragColor = vec4(col, 1.0);
+      }`
+  });
+}
 let sky = null, skyGeo = null, skyline = null, lampLights = [], hemi = null, sunLight = null, sunDisc = null, moonDisc = null, stars = null, clouds = null, water = null;
 function setFog() {
   VIEW = quality === 'high' ? 470 : 330;
@@ -369,14 +411,10 @@ function applyEnv() {
   const E = ENV;
   scene.background = new THREE.Color(E.fog);
   setFog();
-  const cols = skyGeo.attributes.color, pos = skyGeo.attributes.position;
-  const top = new THREE.Color(E.skyTop), mid = new THREE.Color(E.skyMid), hor = new THREE.Color(E.skyHor), c = new THREE.Color();
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i) / 1000;
-    if (y > 0.25) c.copy(mid).lerp(top, clamp((y - 0.25) / 0.6, 0, 1)); else c.copy(hor).lerp(mid, clamp((y + 0.05) / 0.3, 0, 1));
-    cols.setXYZ(i, c.r, c.g, c.b);
-  }
-  cols.needsUpdate = true;
+  const U = sky.material.uniforms;
+  U.uTop.value.set(E.skyTop); U.uMid.value.set(E.skyMid); U.uHor.value.set(E.skyHor);
+  U.uSun.value.set(E.sunDir[0], E.sunDir[1], E.sunDir[2]).normalize(); U.uSunCol.value.set(E.sunColor);
+  U.uCloud.value = E.clouds ? 1 : E.nightClouds || 0; U.uCover.value = E.cloudCover || 0.5; U.uNight.value = TOD === 'nuit' ? 1 : 0;
   const sk = TEXS.skylines[MAP.skyline + '-' + TOD] || TEXS.skyline;
   sk.repeat.set(4, 1);
   skyline.material.map = sk; skyline.material.needsUpdate = true;
@@ -393,7 +431,7 @@ function applyEnv() {
     s.bias = -0.0004; s.normalBias = 0.04; s.radius = 3;
   }
   MAT.shadow.opacity = shadows ? 0.35 : 0.75;
-  sunDisc.visible = E.sunDisc; moonDisc.visible = E.moon; stars.visible = E.stars; clouds.visible = E.clouds;
+  sunDisc.visible = E.sunDisc; moonDisc.visible = E.moon; stars.visible = E.stars; clouds.visible = false;   // nuages dessinés dans le ciel
   water.visible = MAP.ground === 'beach'; water.material.color.set(E.water);
   MAT.road.map = MAP.road === 'circuit' ? TEXS.roadCircuit : TOD === 'jour' ? TEXS.roadDay : TEXS.road;
   const wet = TOD === 'nuit' && (MAP.ground === 'city' || MAP.ground === 'beach');
@@ -451,7 +489,7 @@ function worldUV(geo) {
   }
   geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
-const SMALL_DECOR = new Set(['fence', 'bales', 'umbrella', 'tires', 'pole', 'marshal', 'tower', 'streettree']);
+const SMALL_DECOR = new Set(['fence', 'bales', 'umbrella', 'tires', 'pole', 'marshal', 'tower', 'streettree', 'parked', 'bench', 'bollard', 'railing', 'mesh', 'guard', 'vines', 'sign', 'flag', 'pitwall', 'busstop']);
 const chunkLod = new Map();
 const LOD_FAR_M = 200;   // au-delà, les petits décors ne sont pas dessinés
 function buildChunk(ci, lod = 0) {
@@ -459,7 +497,8 @@ function buildChunk(ci, lod = 0) {
   const road = newBuf(), side = newBuf(), bld = newBuf(), neon = newBuf(), pool = newBuf(), walk = newBuf();
   const group = new THREE.Group();
   const ctx = { side, bld, neon, pool, group, rotors: [] };
-  const profiles = { '-1': GROUND[MAP.ground](-1), '1': GROUND[MAP.ground](1) };
+  curZone = zoneAt(a0);   // tout le tronçon est dans la même zone (zones alignées sur les tronçons)
+  const profiles = { '-1': GROUND[MAP.ground](-1, curZone), '1': GROUND[MAP.ground](1, curZone) };
   for (let a = a0; a < a1; a++) {
     const p0 = pose(a), p1 = pose(a + 1);
     const v0 = a * SEG_M / 9, v1 = (a + 1) * SEG_M / 9;

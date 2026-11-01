@@ -138,7 +138,12 @@ function prepareModel(root, car, spec) {
     else if (all(rx.tail)) m.userData.wfs = 'tail';
     else if (all(MODEL_RX.head)) { m.userData.wfs = 'head'; if (m.emissive) { m.emissive.set(0xfff3dc); m.emissiveIntensity = 1; } }
   }
-  return { root: wrap, repaint: spec.repaint === false ? false : repaint, tris };
+  // hauteur des feux arrière / phares du modèle (pour placer les halos)
+  const lampAt = (tag) => { const b = new THREE.Box3(); wrap.traverse((o) => { if (o.isMesh && !Array.isArray(o.material) && o.material.userData.wfs === tag) b.union(preciseBox(o)); }); return b.isEmpty() ? null : b; };
+  const tb = lampAt('tail'), hb = lampAt('head');
+  const lampY = tb && tb.max.z > car.d.L * 0.3 && tb.getSize(new THREE.Vector3()).y < 0.5 ? (tb.min.y + tb.max.y) / 2 : null;
+  const headY = hb && hb.min.z < -car.d.L * 0.3 && hb.getSize(new THREE.Vector3()).y < 0.5 ? (hb.min.y + hb.max.y) / 2 : null;
+  return { lampY, headY, root: wrap, repaint: spec.repaint === false ? false : repaint, tris };
 }
 
 const repaintCache = new Map();
@@ -165,15 +170,15 @@ function realBody(car, paintHex, opts) {
     const arr = Array.isArray(o.material);
     const mats = (arr ? o.material : [o.material]).map((m) => {
       if (m.userData.wfs === 'paint' && R.repaint) return repaintMat(m, paintHex);
-      if (m.userData.wfs === 'tail' && opts.tailMat) { const t = m.clone(); tails.push(t); if (t.envMap) envMats.add(t); return t; }
+      if (m.userData.wfs === 'tail' && (opts.tailMat || opts.hq)) { const t = m.clone(); tails.push(t); if (t.envMap) envMats.add(t); return t; }
       return m;
     });
     o.material = arr ? mats : mats[0];
   });
   const { wheels, rw } = rigWheels(obj, car);
   return {
-    object: obj, wheels, rw,
-    setBrake: (on) => { for (const t of tails) if (t.emissive) { t.emissive.set(0xff2040); t.emissiveIntensity = on ? 2.5 : 0.7; } }
+    object: obj, wheels, rw, lampY: R.lampY, headY: R.headY,
+    setBrake: (on) => { for (const t of tails) if (t.emissive) { t.emissive.set(0xff2040); t.emissiveIntensity = on ? 2.5 : 0.4; } }
   };
 }
 
@@ -334,11 +339,37 @@ function makeCarMesh(car, paintHex, opts = {}) {
     }
   }
   const setLamp = (arr, on) => { for (const b of arr) { b.lamp.material = on ? MAT.blinkOn : MAT.blinkOff; b.halo.visible = on; } };
+  // feux : halos arrière (rouges), feux de recul (blancs), phares (avant) ; allumés selon jour/nuit, frein, marche arrière
+  if (!MAT.haloTail) {
+    const sm = (c, o) => new THREE.SpriteMaterial({ map: TEXS.radial, color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
+    MAT.haloTail = sm(0xff1a30, 0.55); MAT.haloBrake = sm(0xff2038, 1); MAT.haloRev = sm(0xf4f6ff, 0.7); MAT.haloHead = sm(0xfff1d6, 0.9);
+    MAT.revGlow = new THREE.MeshBasicMaterial({ map: TEXS.radial, color: 0xdfe6ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+  }
+  const ly = real && real.lampY ? real.lampY : car.d.tail - 0.25, hy = real && real.headY ? real.headY : car.d.nose - 0.12;
+  const lamps = { tail: [], rev: [], head: [] };
+  for (const side of [-1, 1]) {
+    const t = new THREE.Sprite(MAT.haloTail); t.position.set(side * (Wd / 2 - 0.18), ly, L / 2 + 0.06); t.scale.set(0.55, 0.55, 1); t.visible = false; inner.add(t); lamps.tail.push(t);
+    if (!opts.traffic) {
+      const r = new THREE.Sprite(MAT.haloRev); r.position.set(side * (Wd / 2 - 0.42), ly - 0.04, L / 2 + 0.07); r.scale.set(0.3, 0.3, 1); r.visible = false; inner.add(r); lamps.rev.push(r);
+      const h = new THREE.Sprite(MAT.haloHead); h.position.set(side * (Wd / 2 - 0.25), hy, -L / 2 - 0.08); h.scale.set(0.9, 0.9, 1); h.visible = false; inner.add(h); lamps.head.push(h);
+    }
+  }
+  const lightState = { k: '' };
+  const setLights = (night, brake, rev) => {
+    const k = (night ? 1 : 0) + (brake ? 2 : 0) + (rev ? 4 : 0);
+    if (lightState.k === k) return; lightState.k = k;
+    for (const t of lamps.tail) { t.visible = night || brake; t.material = brake ? MAT.haloBrake : MAT.haloTail; t.scale.setScalar(brake ? 0.9 : 0.55); }
+    for (const r of lamps.rev) r.visible = !!rev;
+    for (const h of lamps.head) h.visible = !!night;
+    tg.visible = night || brake || rev; tg.material = rev ? MAT.revGlow : MAT.tailGlow;
+    if (body.setBrake) body.setBrake(brake || night, rev);
+  };
   const wheels = body.wheels || [], rw = body.rw || car.d.rw;
   g.userData = {
     inner, len: L, tailGlow: tg,
     /* clignotants : left / right allumés ou non (l'appelant gère le clignotement) */
-    setIndicators: (left, right) => { setLamp(blinkers.left, left); setLamp(blinkers.right, right); }, setBrake: body.setBrake || (() => {}),
+    setIndicators: (left, right) => { setLamp(blinkers.left, left); setLamp(blinkers.right, right); },
+    setLights, setBrake: (on, rev) => setLights(TOD === 'nuit', on, rev),
     /* braquage des roues avant (radians, + = à droite) et distance parcourue (mètres) */
     animWheels: (steerAngle, meters) => {
       const blurK = clamp((Math.abs(meters) / Math.max(1e-3, lastDt) - 6) / 14, 0, 0.92);
@@ -387,7 +418,7 @@ function makeCarLow(car, paintHex) {
   const inner = new THREE.Group();
   inner.add(new THREE.Mesh(lowGeoCache.get(key), MAT.carLow));
   g.add(inner);
-  g.userData = { inner, len: car.d.L, tailGlow: { visible: true }, setBrake: () => {}, setIndicators: () => {}, animWheels: () => {} };
+  g.userData = { inner, len: car.d.L, tailGlow: { visible: true }, setBrake: () => {}, setLights: () => {}, setIndicators: () => {}, animWheels: () => {} };
   return g;
 }
 

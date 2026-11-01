@@ -88,6 +88,50 @@ function hitCar(car, dz, lat, touchLat, touchZ) {
   }
 }
 
+/* duel : contact avec la voiture de l'adversaire (chaque joueur gère sa propre voiture ;
+   l'autre fait le même calcul de son côté, l'effet est donc symétrique) */
+function hitGhosts(dt, myLen, myW) {
+  for (const g of ghosts.values()) {
+    g.hitCd = Math.max(0, (g.hitCd || 0) - dt);
+    if (g.done) continue;
+    const oc = carById(g.car), oLen = oc.d.L / M, oW = oc.d.W / (2 * RW);
+    const dz = g.rd - dist, lat = Math.abs(playerX - g.x);
+    const touchZ = (myLen + oLen) / 2, touchLat = myW + oW;
+    if (Math.abs(dz) >= touchZ || lat >= touchLat) continue;
+    const side = Math.sign(playerX - g.x) || (g.x > 0 ? -1 : 1);
+    const overlapZ = touchZ - Math.abs(dz), overlapX = touchLat - lat;
+    const mid = trackPoint(dist + dz / 2, (playerX + g.x) / 2 * RW, {});
+    const at = { x: mid.x, y: mid.y + 0.55, z: mid.z, floor: mid.y + 0.05 }, vel = { x: Math.sin(mid.th) * speed * M * 0.6, y: 1, z: -Math.cos(mid.th) * speed * M * 0.6 };
+    const gv = g.v || 0, oMass = oc.spec.kg / 1450, share = oMass / (oMass + PERF.mass);   // la plus lourde bouge moins
+    if (overlapX * RW < overlapZ * M * 0.7) {
+      // côte à côte : les carrosseries frottent et se repoussent
+      playerX += side * Math.min(overlapX * share * 2 + 0.003, dt * 2.5 + 0.004);   // séparation progressive (pas de téléportation)
+      heading += side * 0.06 * share; speed *= 1 - 0.8 * dt;
+      if (g.hitCd <= 0) {
+        g.hitCd = 0.2; noiseHit(0.25, 3000, 3, 0.45, 1500); noiseHit(0.2, 220, 1, 0.5, 90); emitSparks(at, vel, 22);
+        shake = Math.max(shake, reduceMotion ? 0 : 0.3); flash = Math.max(flash, 0.25);
+        if (navigator.vibrate) { try { navigator.vibrate(40); } catch (e) {} }
+      }
+      continue;
+    }
+    const rel = Math.abs(speed - gv), impact = rel / MAX_SPEED;
+    if (dz > 0) {
+      // je percute l'arrière de l'adversaire : je recule derrière lui et perds ma vitesse
+      position = wrap(position - overlapZ - 0.15 / M); dist = Math.max(0, dist - overlapZ - 0.15 / M);
+      speed = Math.min(speed, gv + rel * (0.15 + 0.3 * (1 - share)));
+    } else {
+      // il me percute par l'arrière : je suis poussé vers l'avant
+      speed = Math.max(speed, gv * (0.6 + 0.4 * share));
+      heading += (Math.random() - 0.5) * 0.12 * Math.min(1, impact * 4);
+    }
+    if (g.hitCd <= 0) {
+      g.hitCd = 0.35;
+      emitSparks(at, vel, 25 + Math.round(impact * 90));
+      noiseHit(0.5, 160, 0.8, 0.7 + impact, 50); noiseHit(0.3, 2400, 1.5, 0.5, 6000);
+      if (impact * share > 0.22) playerAccident(Math.min(1, impact * share * 1.5), side); else bump(impact);
+    }
+  }
+}
 function update(dt) {
   if (state === 'pause' || state === 'garage') return;
   const playing = state === 'play';
@@ -191,6 +235,9 @@ function update(dt) {
     car.prevDz = dz;
   }
 
+  if (playing && mode === 'duel') hitGhosts(dt, myLen, myW);
+  // nouveau quartier : son nom s'affiche
+  if (playing) { const zs = findSegment(position + PLAYER_Z); if (zs && zs.zoneName) { const key = zs.zoneIdx + ':' + Math.floor(zs.index / ZONE_LEN); if (zoneSeen !== null && key !== zoneSeen) toast(zs.zoneName, '', 'cp'); zoneSeen = key; } }
   if (comboTimer > 0) { comboTimer -= dt; if (comboTimer <= 0) combo = 0; }
   shake = Math.max(0, shake - dt); flash = Math.max(0, flash - dt * 3);
 

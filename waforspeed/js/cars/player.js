@@ -2,7 +2,7 @@
 'use strict';
 
 /* --- voiture du joueur --- */
-let playerMesh = null, playerTailMat = null, flames = [], headlight = null;
+let playerMesh = null, playerTailMat = null, flames = [], headlight = null, revLight = null;
 function buildPlayer() {
   if (playerMesh) scene.remove(playerMesh);
   playerTailMat = new THREE.MeshBasicMaterial({ color: 0xff3050 });
@@ -18,5 +18,7 @@ function buildPlayer() {
   headlight.position.set(0, 0.8, -myCar.d.L / 2);
   const tgt = new THREE.Object3D(); tgt.position.set(0, -0.6, -40);
   playerMesh.add(tgt); headlight.target = tgt; playerMesh.add(headlight);
+  // lumière blanche derrière la voiture en marche arrière (éclaire la route la nuit)
+  revLight = new THREE.PointLight(0xe8eeff, 0, 14, 2); revLight.position.set(0, 0.6, myCar.d.L / 2 + 0.8); playerMesh.add(revLight);
   scene.add(playerMesh);
 }

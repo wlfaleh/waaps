@@ -137,7 +137,7 @@ function startDuelRace() {
 }
 function sendRacePresence() {
   if (!sub) return;
-  sub.presence({ d: Math.round(Math.min(dist, FINISH)), x: Math.round(playerX * 1000) / 1000, v: Math.round(speed) }).catch(() => {});
+  sub.presence({ d: Math.round(Math.min(dist, FINISH)), x: Math.round(playerX * 1000) / 1000, v: Math.round(speed), h: Math.round((heading + spinYaw) * 1000) / 1000, b: braking ? 1 : reversing ? 2 : 0 }).catch(() => {});
 }
 function updateGhosts(dt) {
   if (!sub || mode !== 'duel') { if (ghosts.size) ghosts.clear(); return; }
@@ -152,6 +152,7 @@ function updateGhosts(dt) {
     if (!g) { g = { rd: est, x: clamp(num(pres(p, 'x')), -2, 2) }; ghosts.set(p.peer, g); }
     g.rd = Math.abs(est - g.rd) > 4000 ? est : g.rd + (est - g.rd) * Math.min(1, dt * 8);
     g.x += (clamp(num(pres(p, 'x')), -2, 2) - g.x) * Math.min(1, dt * 10);
+    g.h = clamp(num(pres(p, 'h')), -3.2, 3.2); g.b = num(pres(p, 'b')); g.v = v;
     g.name = peerName(p); g.car = peerCar(p); g.paint = peerPaint(p); g.done = st === 'done'; g.ft = num(pres(p, 'ft'), 0);
   }
   for (const key of [...ghosts.keys()]) if (!seen.has(key)) ghosts.delete(key);
