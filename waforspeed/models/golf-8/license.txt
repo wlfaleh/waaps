@@ -1,0 +1,11 @@
+Model Information:
+* title:	Volkswagen Golf 8. GTI (A8)
+* source:	https://sketchfab.com/3d-models/volkswagen-golf-8-gti-a8-e87d7c0f8937481db236529beb5ecab7
+* author:	GT Cars: Hyperspeed (https://sketchfab.com/Car2022)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+This work is based on "Volkswagen Golf 8. GTI (A8)" (https://sketchfab.com/3d-models/volkswagen-golf-8-gti-a8-e87d7c0f8937481db236529beb5ecab7) by GT Cars: Hyperspeed (https://sketchfab.com/Car2022) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Modifications for WaForSpeed: geometry simplified, textures resized to 1024 px (WebP), files embedded into a single glTF JSON.

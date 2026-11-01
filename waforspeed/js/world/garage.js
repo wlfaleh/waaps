@@ -30,6 +30,7 @@ function buildGarage() {
 }
 function setGarageCar() {
   if (gCar) gScene.remove(gCar);
+  if (typeof requestModel === 'function') requestModel(myCar.id);
   gCar = makeCarMesh(myCar, myPaint().hex, { glow: myCar.glow, hq: true });
   gCar.position.y = 0.08;
   gScene.add(gCar);

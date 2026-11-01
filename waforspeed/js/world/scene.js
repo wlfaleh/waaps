@@ -59,6 +59,7 @@ function syncGhostMeshes() {
     if (gm && (gm.car !== g.car || gm.name !== g.name || gm.paint !== g.paint)) { scene.remove(gm.mesh); gm = null; }
     if (!gm) {
       const spec = carById(g.car);
+      requestModel(spec.id);
       const mesh = makeCarMesh(spec, paintById(g.paint).hex, { glow: spec.glow, hq: true });
       mesh.add(nameSprite(g.name));
       scene.add(mesh);
