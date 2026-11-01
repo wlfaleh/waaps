@@ -72,6 +72,7 @@ function syncGhostMeshes() {
 /* --- placement d'un objet sur la piste --- */
 const TP = {};
 let playerYaw = 0, prevPlayerX = 0;
+const sus = { y: 0, v: 0, prev: null, smoke: 0 };   // suspension du joueur
 function placeOnTrack(obj, sAbs, offset, yaw = 0, roll = 0) {
   trackPoint(sAbs, offset * RW, TP);
   obj.position.set(TP.x, TP.y + 0.15 * 0, TP.z);
@@ -110,18 +111,22 @@ function updateCamera(dt, sP) {
     desired = new THREE.Vector3(car.x - fx * dist + rx * side, car.y + C.h * (portrait ? 1.08 : 1) + p * 0.15, car.z - fz * dist + rz * side);
     const ground = trackPoint(sP - dist / M, playerX * RW, tmpB).y + 0.6;
     if (desired.y < ground) desired.y = ground;   // jamais sous la route dans les côtes
-    look = new THREE.Vector3(car.x + fx * C.ahead, car.y + C.lookH, car.z + fz * C.ahead);
+    // regarde à moitié devant la voiture, à moitié le long de la route : on voit venir les virages
+    const ahead = trackPoint(sP + C.ahead * 1.6 / M, playerX * RW, tmpB);
+    look = new THREE.Vector3((car.x + fx * C.ahead) * 0.55 + ahead.x * 0.45, car.y + C.lookH, (car.z + fz * C.ahead) * 0.55 + ahead.z * 0.45);
   }
   const k = camInit ? 1 - Math.exp(-dt * (C.hood ? 30 : 9)) : 1;
   camPos.lerp(desired, k); camLook.lerp(look, camInit ? 1 - Math.exp(-dt * 14) : 1); camInit = true;
   camera.position.copy(camPos);
   if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - 0.5) * shake * 0.6, (Math.random() - 0.5) * shake * 0.4, 0));
   camera.lookAt(camLook);
-  camera.rotateZ(-steer * (C.hood ? 0.015 : 0.03));
+  camera.rotateZ(-steer * (C.hood ? 0.015 : 0.02) - (reduceMotion ? 0 : clamp(latAcc * 0.0018, -0.03, 0.03)));
+  // vibration légère à très haute vitesse (sensation de vitesse)
+  if (!reduceMotion && p > 0.75) { const k = (p - 0.75) * (nitroOn ? 0.02 : 0.01); camera.position.x += Math.sin(performance.now() * 0.05) * k; camera.position.y += Math.sin(performance.now() * 0.071) * k; }
   const fov = C.fov + (portrait ? 5 : 0) + Math.min(p, 1.3) * 7 + (nitroOn ? 6 : 0);
   fovNow += (fov - fovNow) * Math.min(1, dt * 4);
   camera.fov = fovNow; camera.updateProjectionMatrix();
-  sky.position.copy(camera.position);
+  sky.position.copy(camera.position); sky.material.uniforms.uTime.value += dt;
   skyline.position.set(camera.position.x, camera.position.y + 18, camera.position.z);
   // soleil / lune / étoiles / nuages restent « à l'infini » ; la mer suit la caméra au niveau de la plage
   const sd = ENV.sunDir;
@@ -151,8 +156,23 @@ function render3D(dt, t) {
   inner.rotation.x += (pitchT - inner.rotation.x) * Math.min(1, dt * 6);
   const wa = steer * 0.6 / (1 + Math.abs(speed * M) / 14);
   playerMesh.userData.animWheels(clamp(wa * 1.6, -0.6, 0.6), speed * M * dt * Math.cos(heading));
-  inner.position.y = reduceMotion ? 0 : Math.sin(t * 0.045) * 0.006 * sp;
-  playerMesh.userData.setBrake(braking || reversing);
+  // suspension : ressort amorti excité par les changements de pente (bosses, sommets de côte) et le grain de la route
+  const slope = TP.slope, vms = Math.abs(speed * M);
+  if (sus.prev !== null && !reduceMotion) sus.v += (slope - sus.prev) / Math.max(dt, 1e-3) * vms * 0.004;
+  sus.prev = slope;
+  const grain = reduceMotion ? 0 : (Math.sin(dist * M * 2.3) * 0.5 + Math.sin(dist * M * 5.1 + 1.3) * 0.3) * 0.004 * Math.min(1, vms / 30);
+  sus.v += (-sus.y * 160 - sus.v * 14) * dt; sus.y = clamp(sus.y + sus.v * dt, -0.08, 0.08);
+  inner.position.y = sus.y + grain;
+  inner.rotation.x += clamp(-sus.v * 0.01, -0.02, 0.02);
+  // fumée des pneus : gros freinage, tête-à-queue, dérapage à haute vitesse
+  const skid = (braking && vms > 18) || Math.abs(spinYaw) > 0.3 || (Math.abs(latAcc) > PHYS.grip * 0.92 && vms > 20);
+  sus.smoke -= dt;
+  if (skid && sus.smoke <= 0 && !reduceMotion) {
+    sus.smoke = 0.05;
+    for (const sx of [-1, 1]) { const q = trackPoint(sP - myCar.d.L * 0.35 / M, (playerX * RW + sx * myCar.d.W * 0.4), {}); emitSmoke({ x: q.x, y: q.y + 0.25, z: q.z }, 1); }
+  }
+  // feux : arrière allumés la nuit, stop au freinage, feux de recul blancs en marche arrière
+  playerMesh.userData.setLights(TOD === 'nuit', braking, reversing || speed < -1);
   for (const fl of flames) { fl.visible = nitroOn; if (nitroOn) { const k = 0.7 + Math.random() * 0.6; fl.scale.set(1, 1, k); } }
   // trafic
   for (const car of cars) {
@@ -164,6 +184,7 @@ function render3D(dt, t) {
     const yaw = car.crash ? car.crash.yaw : clamp(Math.atan2(lat, Math.max(car.speed * M, 2)), -0.3, 0.3);
     placeOnTrack(m, sP + rel, car.offset, yaw, car.crash ? Math.sin(car.crash.t * 9) * Math.max(0, 0.06 - car.crash.t * 0.03) : 0);
     m.userData.animWheels(car.crash ? 0 : yaw * 1.6, car.speed * M * dt);
+    m.userData.setLights(TOD === 'nuit', !!car.crash, false);
     // clignotants (feux de détresse si accidentée) ; chaque voiture a son propre rythme
     const blinkOn = ((t / 1000) + (car.rng % 997) / 997) % 0.72 < 0.38;
     if (car.crash) m.userData.setIndicators(blinkOn, blinkOn);
@@ -184,8 +205,10 @@ function render3D(dt, t) {
     gm.mesh.visible = !g.done && rel > -40 / M && rel < (VIEW * SEG_M) / M;
     const moved = Math.max(0, g.rd - (gm.prevRd ?? g.rd)) * M, dx = g.x - (gm.prevX ?? g.x);
     gm.prevRd = g.rd; gm.prevX = g.x;
-    gm.yaw = (gm.yaw || 0) + (clamp(Math.atan2(dx * RW, Math.max(moved, 0.05)), -0.42, 0.42) - (gm.yaw || 0)) * Math.min(1, dt * 8);
-    if (gm.mesh.visible) { placeOnTrack(gm.mesh, g.rd, g.x, gm.yaw); gm.mesh.userData.animWheels(gm.yaw * 1.4, moved); }
+    // cap envoyé par l'adversaire (rotation réelle de sa voiture), sinon estimé par son déplacement
+    const yawT = g.h !== undefined ? g.h : clamp(Math.atan2(dx * RW, Math.max(moved, 0.05)), -0.42, 0.42);
+    gm.yaw = (gm.yaw || 0) + (yawT - (gm.yaw || 0)) * Math.min(1, dt * 8);
+    if (gm.mesh.visible) { placeOnTrack(gm.mesh, g.rd, g.x, gm.yaw); gm.mesh.userData.animWheels(gm.yaw * 1.4, moved); gm.mesh.userData.setBrake(g.b === 1, g.b === 2); }
   }
   // repère
   if (mode === 'solo' && state === 'play') setGantry(`CHECKPOINT ${level + 1}`, '#00E5FF', nextCp);
@@ -212,6 +235,7 @@ function render3D(dt, t) {
   // pales des éoliennes
   for (const g of chunks.values()) for (const r of g.userData.rotors || []) r.rotation.z += r.userData.spin * dt;
   if (headlight) headlight.intensity = ENV.headlight;
+  if (revLight) revLight.intensity += (((reversing || speed < -1) ? (TOD === 'nuit' ? 2.2 : 0.8) : 0) - revLight.intensity) * Math.min(1, dt * 12);
   playerMesh.visible = !CAM_MODES[camMode].hood;   // vue capot : on ne voit pas sa propre voiture
   if (composer) { renderPass.scene = scene; renderPass.camera = camera; bloom.strength = ENV.bloom[0]; bloom.threshold = ENV.bloom[1]; composer.render(dt); }
   else renderer.render(scene, camera);

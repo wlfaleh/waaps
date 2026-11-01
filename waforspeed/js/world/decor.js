@@ -6,77 +6,196 @@
 const BOARD_TEXTS = [['WAFORSPEED', '#FF6A00'], ['GARAGE 88', '#00E5FF'], ['TURBO CAFÉ', '#FF6A00'], ['NUIT BLANCHE', '#00E5FF'], ['PNEUS 24/7', '#00E5FF']];
 const AD_TEXTS = [['WAFORSPEED', '#e2262b', '#ffffff'], ['GRAND PRIX', '#101014', '#ffd23a'], ['PNEUS 24/7', '#ffd23a', '#101014'], ['TURBO', '#1d3f8f', '#ffffff']];
 
+/* ---------- zones : chaque carte traverse plusieurs quartiers (≈ un par checkpoint) ---------- */
+const ZONE_LEN = 14 * 32;   // ≈ 540 m, multiple de la taille d'un tronçon
+const ZONES = {
+  city: [['centre', 'Centre-ville'], ['residentiel', 'Quartier résidentiel'], ['parc', 'Parc urbain'], ['port', 'Zone portuaire'], ['centre', 'Quartier d\'affaires'], ['residentiel', 'Vieux quartier']],
+  beach: [['corniche', 'Corniche'], ['marina', 'Port de plaisance'], ['rochers', 'Côte rocheuse'], ['village', 'Village de pêcheurs']],
+  country: [['champs', 'Champs'], ['foret', 'Forêt'], ['village', 'Village'], ['vignes', 'Vignobles'], ['champs', 'Plaine'], ['foret', 'Bois de pins']],
+  circuit: [['tribunes', 'Ligne droite des tribunes'], ['paddock', 'Paddock'], ['gravier', 'Virages rapides'], ['foret', 'Section boisée']]
+};
+const zoneAt = (a) => { const s = segAt(a); return s && s.zone ? s.zone : ZONES[MAP.ground][0][0]; };
+let curZone = null;   // zone du tronçon en cours de construction (profil du sol)
+
 /* ---------- placement des objets (données) ---------- */
 function generateDecor(map) {
   const len = segments.length, D = mulberry32(map.seed * 31 + 7);
   const item = (n, o) => { segments[((n % len) + len) % len].deco.items.push(o); };
   const collide = (n, offsetM, hit) => { segments[((n % len) + len) % len].sprites.push({ offset: offsetM / RW, collide: true, hit }); };
-  for (let n = 0; n < len; n++) segments[n].deco = { items: [], lamp: 0, lampStyle: null };
+  const themes = ZONES[map.ground];
+  for (let n = 0; n < len; n++) {
+    const zi = Math.floor(n / ZONE_LEN) % themes.length;
+    // la dernière zone, trop courte, prolonge la précédente
+    const z = n >= Math.floor(len / ZONE_LEN) * ZONE_LEN && n >= ZONE_LEN ? Math.floor((n - ZONE_LEN) / ZONE_LEN) % themes.length : zi;
+    segments[n].deco = { items: [], lamp: 0, lampStyle: null };
+    segments[n].zone = themes[z][0]; segments[n].zoneName = themes[z][1]; segments[n].zoneIdx = z;
+  }
   const lamp = (n, side, style) => {
     const s = segments[n % len]; s.deco.lamp = side; s.deco.lampStyle = style;
     item(n, { t: 'lamp', side, style });
     collide(n, side * (RW + (style === 'flood' ? 7 : 0.8)), 0.14);
   };
-
-  if (map.ground === 'city') {
-    for (const side of [-1, 1]) for (let n = side < 0 ? 0 : 5; n < len - 11; n += 11) {
-      if (D() < 0.1) continue;
-      const tall = D();
-      item(n, { t: 'bld', side, len: 11 * SEG_M - 0.6 - D() * 2, d: 10 + D() * 14,
-        h: tall < 0.15 ? 55 + D() * 40 : tall < 0.6 ? 22 + D() * 30 : 10 + D() * 14,
-        tint: Math.floor(D() * 4), u0: Math.floor(D() * 16) / 16, v0: Math.floor(D() * 16) / 16,
-        neon: D() < 0.4 ? (D() < 0.5 ? '#00E5FF' : '#FF6A00') : null, sign: D() < 0.3 });
+  // découpe en plages [z0, z1) de même zone
+  const ranges = [];
+  for (let n = 0; n < len; n++) if (n === 0 || segments[n].zone !== segments[n - 1].zone || segments[n].zoneIdx !== segments[n - 1].zoneIdx) ranges.push([n, len, segments[n].zone]);
+  for (let i = 0; i < ranges.length - 1; i++) ranges[i][1] = ranges[i + 1][0];
+  const free = (n) => !segments[((n % len) + len) % len].deco.lamp;
+  const parked = (z0, z1, side, lat) => { for (let n = z0 + 6; n < z1 - 6; n += 5 + Math.floor(D() * 4)) if (D() < 0.55 && free(n)) item(n, { t: 'parked', side, lat, col: Math.floor(D() * 8), kind: D() < 0.3 ? 1 : 0 }); };
+  const city = {
+    centre(z0, z1) {
+      for (const side of [-1, 1]) for (let n = z0 + (side < 0 ? 0 : 5); n < z1 - 11; n += 11) {
+        if (D() < 0.08) continue;
+        const tall = D();
+        item(n, { t: 'bld', side, len: 11 * SEG_M - 0.6 - D() * 2, d: 10 + D() * 14, h: tall < 0.2 ? 60 + D() * 45 : tall < 0.7 ? 26 + D() * 30 : 12 + D() * 14,
+          tint: Math.floor(D() * 4), u0: Math.floor(D() * 16) / 16, v0: Math.floor(D() * 16) / 16, neon: D() < 0.45 ? (D() < 0.5 ? '#00E5FF' : '#FF6A00') : null, sign: D() < 0.35 });
+      }
+      for (let n = z0 + 12; n < z1; n += 24) lamp(n, (n / 24 | 0) % 2 ? 1 : -1, 'city');
+      for (let n = z0 + 40; n < z1; n += 150) item(n, { t: 'zebra' });
+      for (const side of [-1, 1]) for (let n = z0 + (side < 0 ? 4 : 10); n < z1; n += 16) if (free(n) && free(n + 1) && D() > 0.2) { item(n, { t: 'streettree', side, lat: RW + 3.6, h: 5 + D() * 2.5 }); collide(n, side * (RW + 3.6), 0.08); }
+      for (let n = z0 + 60; n < z1 - 40; n += 130 + Math.floor(D() * 50)) { const side = D() < 0.5 ? -1 : 1; if (!free(n)) continue; item(n, { t: 'board', side, text: Math.floor(D() * BOARD_TEXTS.length) }); collide(n, side * (RW + 1), 0.15); }
+    },
+    residentiel(z0, z1) {
+      // immeubles bas (4-7 étages) aux façades claires, arbres d'alignement, voitures garées, abribus
+      for (const side of [-1, 1]) for (let n = z0 + (side < 0 ? 2 : 7); n < z1 - 9; n += 9) {
+        if (D() < 0.08) continue;
+        item(n, { t: 'bld', side, len: 9 * SEG_M - 0.4 - D() * 1.5, d: 9 + D() * 6, h: 11 + D() * 12, tint: 2 + Math.floor(D() * 2), u0: Math.floor(D() * 16) / 16, v0: Math.floor(D() * 16) / 16, neon: null, sign: false, balcony: true });
+      }
+      for (let n = z0 + 12; n < z1; n += 26) lamp(n, (n / 26 | 0) % 2 ? 1 : -1, 'city');
+      for (const side of [-1, 1]) for (let n = z0 + (side < 0 ? 3 : 8); n < z1; n += 10) if (free(n) && free(n + 1) && D() > 0.1) { item(n, { t: 'streettree', side, lat: RW + 3.6, h: 6 + D() * 3 }); collide(n, side * (RW + 3.6), 0.08); }
+      parked(z0, z1, -1, RW + 1.6); parked(z0, z1, 1, RW + 1.6);
+      for (let n = z0 + 80; n < z1 - 20; n += 160) if (free(n)) item(n, { t: 'busstop', side: D() < 0.5 ? -1 : 1 });
+      for (let n = z0 + 50; n < z1; n += 170) item(n, { t: 'zebra' });
+    },
+    parc(z0, z1) {
+      // un côté : parc (pelouse, arbres, bancs, grille) ; l'autre : immeubles moyens
+      const ps = D() < 0.5 ? -1 : 1;
+      for (let n = z0; n < z1; n += 4) item(n, { t: 'railing', side: ps, lat: RW + 6 });
+      for (let n = z0 + 2; n < z1; n += 3 + Math.floor(D() * 3)) item(n, { t: 'tree', side: ps, lat: RW + 9 + D() * 45, h: 7 + D() * 8, kind: D() < 0.25 ? 'pine' : 'round', along: (D() - 0.5) * 3 });
+      for (let n = z0 + 8; n < z1; n += 22) item(n, { t: 'bench', side: ps, lat: RW + 4.2 });
+      for (let n = z0 + 120; n < z1 - 60; n += 200) item(n, { t: 'fountain', side: ps, lat: RW + 24 });
+      for (let n = z0 + (ps < 0 ? 5 : 0); n < z1 - 11; n += 11) if (D() > 0.1) item(n, { t: 'bld', side: -ps, len: 11 * SEG_M - 0.6 - D() * 2, d: 10 + D() * 10, h: 14 + D() * 22, tint: Math.floor(D() * 4), u0: Math.floor(D() * 16) / 16, v0: Math.floor(D() * 16) / 16, neon: null, sign: false });
+      for (let n = z0 + 14; n < z1; n += 28) lamp(n, ps, 'city');
+      parked(z0, z1, -ps, RW + 1.6);
+    },
+    port(z0, z1) {
+      // entrepôts, conteneurs empilés, grues portuaires, grillage
+      for (const side of [-1, 1]) {
+        for (let n = z0 + (side < 0 ? 0 : 10); n < z1 - 22; n += 22 + Math.floor(D() * 10)) if (D() < 0.7) item(n, { t: 'warehouse', side, lat: RW + 10 + D() * 6, l: 18 + D() * 8, d: 16 + D() * 10, h: 8 + D() * 5, col: Math.floor(D() * 4) });
+        for (let n = z0 + 5; n < z1 - 10; n += 9 + Math.floor(D() * 6)) if (D() < 0.6) item(n, { t: 'containers', side, lat: RW + 34 + D() * 20, k: 2 + Math.floor(D() * 3), seed: Math.floor(D() * 1000) });
+        for (let n = z0 + 30; n < z1; n += 3) item(n, { t: 'mesh', side, lat: RW + 5 });
+      }
+      for (let n = z0 + 60; n < z1; n += 110 + Math.floor(D() * 40)) item(n, { t: 'crane', side: D() < 0.5 ? -1 : 1, lat: RW + 60 + D() * 30, h: 34 + D() * 12 });
+      for (let n = z0 + 15; n < z1; n += 30) lamp(n, (n / 30 | 0) % 2 ? 1 : -1, 'city');
     }
-    for (let n = 12; n < len; n += 24) lamp(n, (n / 24 | 0) % 2 ? 1 : -1, 'city');
-    for (let n = 40; n < len; n += 150) item(n, { t: 'zebra' });
-    for (const side of [-1, 1]) for (let n = side < 0 ? 4 : 10; n < len; n += 16) {
-      if (segments[n].deco.lamp || segments[(n + 1) % len].deco.lamp || D() < 0.15) continue;
-      item(n, { t: 'streettree', side, lat: RW + 3.6, h: 5 + D() * 2.5 }); collide(n, side * (RW + 3.6), 0.08);
+  };
+  const beach = {
+    corniche(z0, z1) {
+      for (let n = z0 + 6; n < z1; n += 9 + Math.floor(D() * 4)) { item(n, { t: 'palm', side: 1, lat: RW + 3.2, h: 7 + D() * 4, lean: (D() - 0.5) * 0.5, rot: D() * 6 }); collide(n, RW + 3.2, 0.1); }
+      for (let n = z0 + 3; n < z1; n += 7 + Math.floor(D() * 6)) item(n, { t: 'umbrella', side: 1, lat: RW + 12 + D() * 20, col: Math.floor(D() * 5), along: (D() - 0.5) * 4 });
+      for (let n = z0 + 40; n < z1; n += 160 + Math.floor(D() * 80)) item(n, { t: 'tower', side: 1, lat: RW + 22 });
+      for (let n = z0 + 2; n < z1 - 12; n += 12 + Math.floor(D() * 10)) if (D() > 0.25) item(n, { t: 'villa', side: -1, lat: RW + 12 + D() * 6, w: 8 + D() * 6, d: 8 + D() * 5, h: 4 + D() * 5, roof: Math.floor(D() * 3), floors: D() < 0.4 ? 2 : 1 });
+      for (let n = z0 + 9; n < z1; n += 14 + Math.floor(D() * 8)) item(n, { t: 'palm', side: -1, lat: RW + 5 + D() * 3, h: 6 + D() * 4, lean: (D() - 0.5) * 0.4, rot: D() * 6 });
+      for (let n = z0 + 15; n < z1; n += 30) lamp(n, 1, 'beach');
+      for (let n = z0 + 90; n < z1 - 40; n += 180) { item(n, { t: 'board', side: -1, text: Math.floor(D() * BOARD_TEXTS.length) }); collide(n, -(RW + 1), 0.15); }
+    },
+    marina(z0, z1) {
+      // quai, bateaux amarrés côté mer, cafés colorés côté terre
+      for (let n = z0 + 2; n < z1; n += 3) item(n, { t: 'bollard', side: 1, lat: RW + 6.5 });
+      for (let n = z0 + 4; n < z1 - 6; n += 6 + Math.floor(D() * 4)) item(n, { t: 'boat', side: 1, lat: RW + 13 + D() * 18, l: 7 + D() * 7, sail: D() < 0.6, col: Math.floor(D() * 4), rot: (D() - 0.5) * 0.5 });
+      for (let n = z0 + 2; n < z1 - 8; n += 8 + Math.floor(D() * 4)) item(n, { t: 'villa', side: -1, lat: RW + 6 + D() * 2, w: 7 + D() * 3, d: 8 + D() * 3, h: 6 + D() * 5, roof: Math.floor(D() * 3), floors: 2, col: Math.floor(D() * 6) });
+      for (let n = z0 + 15; n < z1; n += 28) lamp(n, 1, 'beach');
+    },
+    rochers(z0, z1) {
+      // rochers côté mer, falaise boisée de pins côté terre
+      for (let n = z0 + 2; n < z1; n += 2 + Math.floor(D() * 3)) item(n, { t: 'rock', side: 1, lat: RW + 6 + D() * 30, s: 1 + D() * 3.5, rot: D() * 6 });
+      for (let n = z0 + 1; n < z1; n += 3 + Math.floor(D() * 3)) item(n, { t: 'tree', side: -1, lat: RW + 6 + D() * 30, h: 7 + D() * 7, kind: D() < 0.75 ? 'pine' : 'round', along: (D() - 0.5) * 3 });
+      for (let n = z0; n < z1; n += 3) item(n, { t: 'guard', side: 1, lat: RW + 1.2 });
+      for (let n = z0 + 20; n < z1; n += 40) lamp(n, 1, 'beach');
+    },
+    village(z0, z1) {
+      for (const side of [-1, 1]) for (let n = z0 + (side < 0 ? 1 : 5); n < z1 - 7; n += 7 + Math.floor(D() * 3)) {
+        if (side > 0 && D() < 0.5) continue;
+        item(n, { t: 'villa', side, lat: side < 0 ? RW + 5 + D() * 2 : RW + 18 + D() * 6, w: 6 + D() * 3, d: 7 + D() * 3, h: 5 + D() * 4, roof: Math.floor(D() * 3), floors: D() < 0.6 ? 2 : 1, col: Math.floor(D() * 6) });
+      }
+      for (let n = z0 + 4; n < z1; n += 11 + Math.floor(D() * 6)) item(n, { t: 'boat', side: 1, lat: RW + 30 + D() * 10, l: 5 + D() * 3, sail: false, col: Math.floor(D() * 4), rot: 1.2 + D() });
+      for (let n = z0 + 12; n < z1; n += 26) lamp(n, -1, 'beach');
+      parked(z0, z1, -1, RW + 1.5);
     }
-    for (let n = 75; n < len - 40; n += 140 + Math.floor(D() * 60)) {
+  };
+  const country = {
+    champs(z0, z1) {
+      for (const side of [-1, 1]) {
+        for (let n = z0; n < z1; n += 3) if (Math.floor((n + (side > 0 ? 40 : 0)) / 90) % 2 === 0) item(n, { t: 'fence', side, lat: RW + 3.4 });
+        for (let n = z0; n < z1; n += 24) if (Math.floor((n + (side > 0 ? 40 : 0)) / 90) % 2 === 1 && D() < 0.8) item(n, { t: 'hedge', side, lat: RW + 4.2, l: 24 * SEG_M - 2 });
+        for (let n = z0 + Math.floor(D() * 10); n < z1; n += 6 + Math.floor(D() * 18)) item(n, { t: 'tree', side, lat: RW + 6 + D() * (D() < 0.3 ? 70 : 20), h: 6 + D() * 7, kind: D() < 0.35 ? 'pine' : 'round', along: (D() - 0.5) * 6 });
+        for (let n = z0 + 30 + Math.floor(D() * 60); n < z1; n += 140 + Math.floor(D() * 120)) item(n, { t: 'farm', side, lat: RW + 28 + D() * 30, barn: D() < 0.5 });
+        for (let n = z0 + Math.floor(D() * 40); n < z1; n += 40 + Math.floor(D() * 60)) item(n, { t: 'bales', side, lat: RW + 16 + D() * 40, k: 2 + Math.floor(D() * 4) });
+        for (let n = z0 + 60 + Math.floor(D() * 50); n < z1; n += 180 + Math.floor(D() * 150)) item(n, { t: 'turbine', side, lat: RW + 90 + D() * 80, h: 55 + D() * 25 });
+      }
+      for (let n = z0 + 20; n < z1; n += 50) { const side = (n / 50 | 0) % 2 ? 1 : -1; item(n, { t: 'pole', side, lat: RW + 2.6 }); collide(n, side * (RW + 2.6), 0.08); }
+    },
+    foret(z0, z1) {
+      // forêt dense des deux côtés, sous-bois sombre
+      for (const side of [-1, 1]) for (let n = z0 + Math.floor(D() * 3); n < z1; n += 1 + Math.floor(D() * 2)) {
+        item(n, { t: 'tree', side, lat: RW + 4.5 + D() * 9, h: 12 + D() * 10, kind: D() < 0.7 ? 'pine' : 'round', along: (D() - 0.5) * 1.2 });
+        if (D() < 0.6) item(n, { t: 'tree', side, lat: RW + 14 + D() * 35, h: 14 + D() * 10, kind: D() < 0.7 ? 'pine' : 'round', along: (D() - 0.5) * 1.2 });
+      }
+      for (let n = z0 + 30; n < z1; n += 90) item(n, { t: 'sign', side: D() < 0.5 ? -1 : 1, lat: RW + 2, kind: 1 });
+    },
+    village(z0, z1) {
+      for (const side of [-1, 1]) for (let n = z0 + (side < 0 ? 1 : 4); n < z1 - 7; n += 7 + Math.floor(D() * 4)) item(n, { t: 'villa', side, lat: RW + 4 + D() * 3, w: 7 + D() * 4, d: 8 + D() * 3, h: 5 + D() * 3, roof: Math.floor(D() * 3), floors: D() < 0.5 ? 2 : 1, col: Math.floor(D() * 6) });
+      item(z0 + Math.floor((z1 - z0) / 2), { t: 'church', side: D() < 0.5 ? -1 : 1, lat: RW + 20 });
+      for (let n = z0 + 10; n < z1; n += 24) lamp(n, (n / 24 | 0) % 2 ? 1 : -1, 'city');
+      for (let n = z0 + 40; n < z1; n += 120) item(n, { t: 'zebra' });
+      parked(z0, z1, -1, RW + 1.4); parked(z0, z1, 1, RW + 1.4);
+    },
+    vignes(z0, z1) {
+      // rangées de vignes sur les coteaux, cyprès, mas
+      for (const side of [-1, 1]) {
+        for (let n = z0; n < z1; n += 12) for (let k = 0; k < 10; k++) item(n, { t: 'vines', side, lat: RW + 6 + k * 3.2, l: 12 * SEG_M - 0.6 });
+        for (let n = z0 + Math.floor(D() * 10); n < z1; n += 14 + Math.floor(D() * 10)) item(n, { t: 'tree', side, lat: RW + 3.5, h: 9 + D() * 4, kind: 'cypress', along: 0 });
+        for (let n = z0 + 80; n < z1; n += 200) item(n, { t: 'farm', side, lat: RW + 45 + D() * 20, barn: false });
+      }
+    }
+  };
+  const circuit = {
+    tribunes(z0, z1) {
+      for (const side of [-1, 1]) {
+        for (let n = z0; n < z1; n += 4) item(n, { t: 'tires', side, lat: RW + 5.6 });
+        for (let n = z0; n < z1; n += 20) item(n, { t: 'adboard', side, lat: RW + 5.0, text: Math.floor(D() * AD_TEXTS.length) });
+      }
+      for (let n = z0; n < z1 - 26; n += 26) for (const side of [-1, 1]) if (D() < 0.9) item(n, { t: 'stand', side, lat: RW + 14, l: 26 * SEG_M - 1, rows: 7 + Math.floor(D() * 6) });
+      for (let n = z0 + 10; n < z1; n += 34) lamp(n, (n / 34 | 0) % 2 ? 1 : -1, 'flood');
+    },
+    paddock(z0, z1) {
+      // stands des équipes (garages), drapeaux, mur des stands
       const side = D() < 0.5 ? -1 : 1;
-      if (segments[n].deco.lamp) continue;
-      item(n, { t: 'board', side, text: Math.floor(D() * BOARD_TEXTS.length) });
-      collide(n, side * (RW + 1), 0.15);
+      for (let n = z0; n < z1; n += 3) item(n, { t: 'pitwall', side, lat: RW + 1.4 });
+      for (let n = z0 + 2; n < z1 - 14; n += 14) item(n, { t: 'garage', side, lat: RW + 16, l: 14 * SEG_M - 0.5, col: Math.floor(D() * 6) });
+      for (let n = z0; n < z1; n += 4) item(n, { t: 'tires', side: -side, lat: RW + 5.6 });
+      for (let n = z0; n < z1; n += 26) item(n, { t: 'stand', side: -side, lat: RW + 14, l: 26 * SEG_M - 1, rows: 5 + Math.floor(D() * 4) });
+      for (let n = z0 + 6; n < z1; n += 18) item(n, { t: 'flag', side, lat: RW + 9, col: Math.floor(D() * 6) });
+      for (let n = z0 + 10; n < z1; n += 34) lamp(n, -side, 'flood');
+    },
+    gravier(z0, z1) {
+      // bacs à graviers, murs de pneus plus loin, commissaires
+      for (const side of [-1, 1]) {
+        for (let n = z0; n < z1; n += 4) item(n, { t: 'tires', side, lat: RW + 16 });
+        for (let n = z0 + 30; n < z1; n += 90) item(n, { t: 'marshal', side, lat: RW + 19 });
+        for (let n = z0 + Math.floor(D() * 20); n < z1; n += 10 + Math.floor(D() * 14)) item(n, { t: 'tree', side, lat: RW + 40 + D() * 50, h: 8 + D() * 8, kind: D() < 0.5 ? 'pine' : 'round', along: 0 });
+      }
+      for (let n = z0 + 10; n < z1; n += 40) lamp(n, (n / 40 | 0) % 2 ? 1 : -1, 'flood');
+    },
+    foret(z0, z1) {
+      for (const side of [-1, 1]) {
+        for (let n = z0; n < z1; n += 4) item(n, { t: 'tires', side, lat: RW + 5.6 });
+        for (let n = z0; n < z1; n += 2) item(n, { t: 'tree', side, lat: RW + 10 + D() * 30, h: 12 + D() * 10, kind: D() < 0.6 ? 'pine' : 'round', along: (D() - 0.5) * 2 });
+      }
+      for (let n = z0 + 10; n < z1; n += 44) lamp(n, (n / 44 | 0) % 2 ? 1 : -1, 'flood');
     }
-  } else if (map.ground === 'beach') {
-    // côté mer (droite) : promenade, palmiers, parasols, postes de secours ; côté terre : villas et palmiers
-    for (let n = 6; n < len; n += 9 + Math.floor(D() * 4)) { item(n, { t: 'palm', side: 1, lat: RW + 3.2, h: 7 + D() * 4, lean: (D() - 0.5) * 0.5, rot: D() * 6 }); collide(n, RW + 3.2, 0.1); }
-    for (let n = 3; n < len; n += 7 + Math.floor(D() * 6)) item(n, { t: 'umbrella', side: 1, lat: RW + 12 + D() * 20, col: Math.floor(D() * 5), along: (D() - 0.5) * 4 });
-    for (let n = 40; n < len; n += 160 + Math.floor(D() * 80)) item(n, { t: 'tower', side: 1, lat: RW + 22 });
-    for (let n = 2; n < len - 12; n += 12 + Math.floor(D() * 10)) {
-      if (D() < 0.25) continue;
-      item(n, { t: 'villa', side: -1, lat: RW + 12 + D() * 6, w: 8 + D() * 6, d: 8 + D() * 5, h: 4 + D() * 5, roof: Math.floor(D() * 3), floors: D() < 0.4 ? 2 : 1 });
-    }
-    for (let n = 9; n < len; n += 14 + Math.floor(D() * 8)) item(n, { t: 'palm', side: -1, lat: RW + 5 + D() * 3, h: 6 + D() * 4, lean: (D() - 0.5) * 0.4, rot: D() * 6 });
-    for (let n = 15; n < len; n += 30) lamp(n, 1, 'beach');
-    for (let n = 70; n < len; n += 200) item(n, { t: 'zebra' });
-    for (let n = 90; n < len - 40; n += 180 + Math.floor(D() * 60)) { item(n, { t: 'board', side: -1, text: Math.floor(D() * BOARD_TEXTS.length) }); collide(n, -(RW + 1), 0.15); }
-  } else if (map.ground === 'country') {
-    for (const side of [-1, 1]) {
-      // haies et clôtures alternées, arbres isolés ou en bosquets, fermes, bottes de foin, éoliennes au loin
-      for (let n = 0; n < len; n += 3) if (Math.floor((n + (side > 0 ? 40 : 0)) / 90) % 2 === 0) item(n, { t: 'fence', side, lat: RW + 3.4 });
-      for (let n = 0; n < len; n += 24) if (Math.floor((n + (side > 0 ? 40 : 0)) / 90) % 2 === 1 && D() < 0.8) item(n, { t: 'hedge', side, lat: RW + 4.2, l: 24 * SEG_M - 2 });
-      for (let n = Math.floor(D() * 10); n < len; n += 6 + Math.floor(D() * 18)) item(n, { t: 'tree', side, lat: RW + 6 + D() * (D() < 0.3 ? 70 : 20), h: 6 + D() * 7, kind: D() < 0.35 ? 'pine' : 'round', along: (D() - 0.5) * 6 });
-      for (let n = 30 + Math.floor(D() * 60); n < len; n += 140 + Math.floor(D() * 120)) item(n, { t: 'farm', side, lat: RW + 28 + D() * 30, barn: D() < 0.5 });
-      for (let n = Math.floor(D() * 40); n < len; n += 40 + Math.floor(D() * 60)) item(n, { t: 'bales', side, lat: RW + 16 + D() * 40, k: 2 + Math.floor(D() * 4) });
-      for (let n = 60 + Math.floor(D() * 50); n < len; n += 180 + Math.floor(D() * 150)) item(n, { t: 'turbine', side, lat: RW + 90 + D() * 80, h: 55 + D() * 25 });
-    }
-    for (let n = 20; n < len; n += 50) { const side = (n / 50 | 0) % 2 ? 1 : -1; item(n, { t: 'pole', side, lat: RW + 2.6 }); collide(n, side * (RW + 2.6), 0.08); }
-  } else if (map.ground === 'circuit') {
-    for (const side of [-1, 1]) {
-      for (let n = 0; n < len; n += 4) item(n, { t: 'tires', side, lat: RW + 5.6 });
-      for (let n = 0; n < len; n += 20) item(n, { t: 'adboard', side, lat: RW + 5.0, text: Math.floor(D() * AD_TEXTS.length) });
-      for (let n = Math.floor(D() * 30); n < len; n += 8 + Math.floor(D() * 16)) item(n, { t: 'tree', side, lat: RW + 40 + D() * 60, h: 8 + D() * 8, kind: D() < 0.5 ? 'pine' : 'round', along: 0 });
-      for (let n = 60; n < len; n += 110) item(n, { t: 'marshal', side, lat: RW + 8 });
-    }
-    // tribunes sur les lignes droites
-    for (let n = 0; n < len; n++) {
-      const s = segments[n];
-      if (Math.abs(s.curve) < 0.2 && n % 26 === 0) for (const side of [-1, 1]) if (D() < 0.8) item(n, { t: 'stand', side, lat: RW + 14, l: 26 * SEG_M - 1, rows: 6 + Math.floor(D() * 5) });
-    }
-    for (let n = 10; n < len; n += 34) lamp(n, (n / 34 | 0) % 2 ? 1 : -1, 'flood');
-  }
+  };
+  const gens = { city, beach, country, circuit }[map.ground];
+  for (const [z0, z1, z] of ranges) gens[z](z0, z1);
 }
 
 /* ---------- bas-côtés : bandes depuis le bord de la route ----------
@@ -89,33 +208,36 @@ const GCOL = {
 };
 const FIELDS = ['#9bb04f', '#8aa043', '#cdb259', '#bfa34c', '#7e9a3c', '#a9a35a'].map((h) => hex3(h));
 const fieldCol = (a, s) => FIELDS[(mulberry32(Math.floor(a / 70) * 7 + (s > 0 ? 3 : 0))() * FIELDS.length) | 0];
+const GCOL2 = { park: hex3('#4e7a34'), concrete: hex3('#6e6e6a'), forest: hex3('#2f3f22'), rockG: hex3('#7d7a70'), gravel: hex3('#c9b98f'), quay: hex3('#9a958a'), pitLane: hex3('#3a3b3f'), vineSoil: hex3('#8a6e4a') };
+const vineCol = (a, s) => (Math.floor(a / 3) % 2 ? GCOL2.vineSoil : hex3('#7a6240'));
 const GROUND = {
-  city: (s) => [
+  city: (s, z) => [
     { a: RW, b: RW + 0.5, ya: 0.15, yb: 0.15, col: (a) => (Math.floor(a / RUMBLE) % 2 ? GCOL.kerbA : GCOL.kerbB), curb: true },
     { a: RW + 0.5, b: RW + 6, ya: 0.15, yb: 0.15, col: GCOL.walk, walk: true },
-    { a: RW + 6, b: RW + 70, ya: 0.15, yb: -0.3, col: GCOL.cityGround }
+    z === 'parc' ? { a: RW + 6, b: RW + 80, ya: 0.15, yb: 0.4, col: GCOL2.park }
+      : { a: RW + 6, b: RW + 70, ya: 0.15, yb: -0.3, col: z === 'port' ? GCOL2.concrete : GCOL.cityGround }
   ],
-  beach: (s) => s > 0 ? [
+  beach: (s, z) => s > 0 ? [
     { a: RW, b: RW + 0.4, ya: 0.1, yb: 0.1, col: (a) => (Math.floor(a / RUMBLE) % 2 ? GCOL.white : GCOL.grey), curb: true },
-    { a: RW + 0.4, b: RW + 5, ya: 0.1, yb: 0.1, col: GCOL.prom, walk: true },
-    { a: RW + 5, b: RW + 38, ya: 0.05, yb: -1.1, col: GCOL.sand },
-    { a: RW + 38, b: RW + 48, ya: -1.1, yb: -1.9, col: GCOL.wet }
+    ...(z === 'marina' ? [{ a: RW + 0.4, b: RW + 7, ya: 0.1, yb: 0.1, col: GCOL2.quay, walk: true }, { a: RW + 7, b: RW + 7.2, ya: 0.1, yb: -1.6, col: GCOL2.quay }]
+      : z === 'rochers' ? [{ a: RW + 0.4, b: RW + 2, ya: 0.1, yb: 0.1, col: GCOL.prom }, { a: RW + 2, b: RW + 40, ya: 0, yb: -1.8, col: GCOL2.rockG }]
+      : [{ a: RW + 0.4, b: RW + 5, ya: 0.1, yb: 0.1, col: GCOL.prom, walk: true }, { a: RW + 5, b: RW + 38, ya: 0.05, yb: -1.1, col: GCOL.sand }, { a: RW + 38, b: RW + 48, ya: -1.1, yb: -1.9, col: GCOL.wet }])
   ] : [
     { a: RW, b: RW + 0.4, ya: 0.1, yb: 0.1, col: (a) => (Math.floor(a / RUMBLE) % 2 ? GCOL.white : GCOL.grey), curb: true },
     { a: RW + 0.4, b: RW + 3, ya: 0.1, yb: 0.1, col: GCOL.prom, walk: true },
-    { a: RW + 3, b: RW + 30, ya: 0.1, yb: 1.6, col: GCOL.dune },
-    { a: RW + 30, b: RW + 170, ya: 1.6, yb: 30, col: GCOL.hill }
+    ...(z === 'rochers' ? [{ a: RW + 3, b: RW + 40, ya: 0.1, yb: 9, col: hex3('#5f6a3a') }, { a: RW + 40, b: RW + 170, ya: 9, yb: 45, col: GCOL2.rockG }]
+      : [{ a: RW + 3, b: RW + 30, ya: 0.1, yb: 1.6, col: z === 'village' || z === 'marina' ? GCOL.prom : GCOL.dune }, { a: RW + 30, b: RW + 170, ya: 1.6, yb: 30, col: GCOL.hill }])
   ],
-  country: (s) => [
-    { a: RW, b: RW + 1.6, ya: 0, yb: -0.05, col: GCOL.verge },
-    { a: RW + 1.6, b: RW + 3, ya: -0.05, yb: -0.4, col: GCOL.ditch },
-    { a: RW + 3, b: RW + 95, ya: -0.4, yb: 0.2, col: fieldCol },
-    { a: RW + 95, b: RW + 220, ya: 0.2, yb: 9, col: GCOL.farHill }
+  country: (s, z) => [
+    { a: RW, b: RW + 1.6, ya: 0, yb: -0.05, col: z === 'village' ? GCOL.walk : GCOL.verge, walk: z === 'village' },
+    { a: RW + 1.6, b: RW + 3, ya: -0.05, yb: -0.4, col: z === 'foret' ? GCOL2.forest : GCOL.ditch },
+    { a: RW + 3, b: RW + 95, ya: -0.4, yb: z === 'vignes' ? 6 : 0.2, col: z === 'foret' ? GCOL2.forest : z === 'vignes' ? vineCol : z === 'village' ? GCOL.verge : fieldCol },
+    { a: RW + 95, b: RW + 220, ya: z === 'vignes' ? 6 : 0.2, yb: z === 'vignes' ? 26 : 9, col: z === 'foret' ? GCOL2.forest : GCOL.farHill }
   ],
-  circuit: (s) => [
+  circuit: (s, z) => [
     { a: RW, b: RW + 1.3, ya: 0.04, yb: 0.04, col: (a) => (a % 2 ? GCOL.red : GCOL.white) },
-    { a: RW + 1.3, b: RW + 14, ya: 0.02, yb: 0, col: GCOL.grass },
-    { a: RW + 14, b: RW + 100, ya: 0, yb: 0.5, col: GCOL.grass2 }
+    z === 'gravier' ? { a: RW + 1.3, b: RW + 15, ya: 0.02, yb: 0, col: GCOL2.gravel } : z === 'paddock' && s > 0 === (s > 0) ? { a: RW + 1.3, b: RW + 14, ya: 0.02, yb: 0, col: GCOL.grass } : { a: RW + 1.3, b: RW + 14, ya: 0.02, yb: 0, col: GCOL.grass },
+    { a: RW + 14, b: RW + 100, ya: 0, yb: 0.5, col: z === 'paddock' ? GCOL2.pitLane : GCOL.grass2 }
   ]
 };
 
@@ -378,10 +500,156 @@ const DECOR = {
     box(ctx.side, [base[0] + out[0] * back * 0.5, base[1] + it.rows * 0.55 + 4.5, base[2] + out[2] * back * 0.5], r, f, back + 2, 0.3, it.l + 1, C.standRoof);
   }
 };
+/* ---------- objets des zones (quartiers) ---------- */
+const C2 = {
+  cars: ['#c9ccd2', '#0f1014', '#7b808a', '#1d3f8f', '#7a1426', '#2f4b3e', '#a7acb5', '#c9b28a'].map(hex3), carGlass: hex3('#1a222c'), tireB: hex3('#111113'),
+  wh: [hex3('#8a8f96'), hex3('#a0723c'), hex3('#5d6b78'), hex3('#8e3b2e')], cont: ['#b8352a', '#1f5f9a', '#d8a12a', '#3a7d44', '#7a3fa0', '#d06a1d'].map(hex3),
+  crane: hex3('#d9a21b'), hull: [hex3('#f2f2f0'), hex3('#1d3f8f'), hex3('#b8352a'), hex3('#2f6f5f')], sail: hex3('#f7f5ee'), rock: hex3('#6f6b62'), rock2: hex3('#8a857a'),
+  walls: ['#f2e6c9', '#e9c9a4', '#f4dcd0', '#d9e6ef', '#f0e1a8', '#e2d5c3'].map(hex3), cypress: hex3('#24452a'), vine: hex3('#4d7a2a'), flagC: ['#e2262b', '#ffd23a', '#1d8fb8', '#ffffff', '#2f8f4f', '#ff6a00'].map(hex3),
+  garage: ['#c81e24', '#1d3f8f', '#2f8f4f', '#ff6a00', '#101014', '#ffd23a'].map(hex3), bench: hex3('#6b4a2e'), metal: hex3('#3a3d44'), water: hex3('#4aa3c7')
+};
+Object.assign(DECOR, {
+  parked(ctx, it, p) {
+    // voiture garée le long du trottoir (silhouette simple)
+    const [r, f] = axes(p.th), b = lateral(p, it.side * it.lat, 0.02), col = C2.cars[it.col];
+    const L = it.kind ? 4.6 : 4.1, Wd = 1.8, H = it.kind ? 1.65 : 1.45;
+    box(ctx.side, [b[0], b[1] + 0.25, b[2]], r, f, Wd, H * 0.42, L, col);
+    box(ctx.side, [b[0] + f[0] * 0.25, b[1] + 0.25 + H * 0.42, b[2] + f[2] * 0.25], r, f, Wd * 0.9, H * 0.38, L * 0.55, C2.carGlass, { taper: 0.86, taperL: 0.8 });
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) addGeo(ctx.side, prims().cyl12, [b[0] + r[0] * sx * Wd * 0.42 + f[0] * sz * L * 0.32, b[1] + 0.32, b[2] + r[2] * sx * Wd * 0.42 + f[2] * sz * L * 0.32], -p.th, C2.tireB, [0.32, 0.22, 0.32], 0, Math.PI / 2);
+  },
+  busstop(ctx, it, p) {
+    const [r, f] = axes(p.th), b = lateral(p, it.side * (RW + 3.8), 0.15);
+    box(ctx.side, [b[0] + r[0] * it.side * 0.8, b[1], b[2] + r[2] * it.side * 0.8], r, f, 0.1, 2.5, 4, C2.metal);
+    box(ctx.side, [b[0], b[1] + 2.5, b[2]], r, f, 1.8, 0.1, 4.2, C2.metal);
+    box(ctx.neon, [b[0] + r[0] * it.side * 0.75, b[1] + 0.6, b[2] + r[2] * it.side * 0.75], r, f, 0.04, 1.6, 1.2, hex3('#bfe8ff'));
+    box(ctx.side, [b[0] + r[0] * it.side * 0.4, b[1], b[2] + r[2] * it.side * 0.4], r, f, 0.4, 0.5, 2.4, C2.bench);
+  },
+  railing(ctx, it, p) {
+    const [r, f] = axes(p.th);
+    box(ctx.side, lateral(p, it.side * it.lat, 0.15), r, f, 0.06, 1.1, 0.06, C2.metal);
+    box(ctx.side, lateral(p, it.side * it.lat, 1.15), r, f, 0.05, 0.05, 4 * SEG_M, C2.metal);
+  },
+  bench(ctx, it, p) {
+    const [r, f] = axes(p.th), b = lateral(p, it.side * it.lat, 0.15);
+    box(ctx.side, b, r, f, 0.5, 0.45, 1.8, C2.bench); box(ctx.side, [b[0] + r[0] * it.side * 0.25, b[1], b[2] + r[2] * it.side * 0.25], r, f, 0.08, 0.95, 1.8, C2.bench);
+  },
+  fountain(ctx, it, p) {
+    const P = prims(), b = lateral(p, it.side * it.lat, groundY(it.side, it.lat));
+    addGeo(ctx.side, P.cyl12, b, 0, hex3('#c9c4b8'), [4, 0.6, 4]);
+    addGeo(ctx.neon, P.cyl12, [b[0], b[1] + 0.05, b[2]], 0, C2.water, [3.7, 0.6, 3.7]);
+    addGeo(ctx.side, P.cyl12, b, 0, hex3('#c9c4b8'), [0.5, 2.2, 0.5]);
+  },
+  warehouse(ctx, it, p, a) {
+    const pm = pose(a + Math.round(it.l / SEG_M / 2)), [r, f] = axes(pm.th);
+    const o = lateral(pm, it.side * (it.lat + it.d / 2), -0.2), col = C2.wh[it.col];
+    box(ctx.side, o, r, f, it.d, it.h, it.l, col);
+    addGeo(ctx.side, prims().roof, [o[0], o[1] + it.h + 0.6, o[2]], -pm.th, hex3('#55585e'), [it.d * 1.02, 1.2, it.l * 1.02]);
+    const door = lateral(pm, it.side * (it.lat - 0.02), -0.2);
+    for (const k of [-0.25, 0.25]) box(ctx.side, [door[0] + f[0] * it.l * k, door[1], door[2] + f[2] * it.l * k], r, f, 0.1, it.h * 0.6, it.l * 0.18, hex3('#2c2f35'));
+  },
+  containers(ctx, it, p) {
+    const [r, f] = axes(p.th), b = lateral(p, it.side * it.lat, groundY(it.side, it.lat));
+    const R = mulberry32(it.seed);
+    for (let i = 0; i < it.k; i++) for (let h = 0; h < 1 + Math.floor(R() * 3); h++)
+      box(ctx.side, [b[0] + r[0] * i * 2.6, b[1] + h * 2.6, b[2] + r[2] * i * 2.6], r, f, 2.45, 2.55, 12, C2.cont[Math.floor(R() * C2.cont.length)]);
+  },
+  mesh(ctx, it, p) {
+    const [r, f] = axes(p.th);
+    box(ctx.side, lateral(p, it.side * it.lat, 0), r, f, 0.08, 2.2, 0.08, C2.metal);
+    box(ctx.side, lateral(p, it.side * it.lat, 2.1), r, f, 0.04, 0.06, 3 * SEG_M, C2.metal);
+  },
+  crane(ctx, it, p) {
+    const [r, f] = axes(p.th), b = lateral(p, it.side * it.lat, groundY(it.side, it.lat));
+    for (const dx of [-3, 3]) for (const dz of [-3, 3]) box(ctx.side, [b[0] + r[0] * dx + f[0] * dz, b[1], b[2] + r[2] * dx + f[2] * dz], r, f, 0.7, it.h, 0.7, C2.crane);
+    box(ctx.side, [b[0], b[1] + it.h, b[2]], r, f, 7.5, 2.2, 7.5, C2.crane);
+    box(ctx.side, [b[0] - r[0] * it.side * 14, b[1] + it.h + 1.5, b[2] - r[2] * it.side * 14], r, f, 40, 1.4, 2, C2.crane);
+    box(ctx.side, [b[0] + r[0] * it.side * 3, b[1] + it.h + 2.2, b[2] + r[2] * it.side * 3], r, f, 4, 3, 4, hex3('#e8e8e8'));
+  },
+  bollard(ctx, it, p) { const b = lateral(p, it.side * it.lat, 0.1); addGeo(ctx.side, prims().cyl, b, 0, hex3('#2a2c30'), [0.18, 0.6, 0.18]); },
+  boat(ctx, it, p) {
+    const P = prims(), b = lateral(p, it.side * it.lat, -1.55), yaw = -p.th + it.rot, col = C2.hull[it.col];
+    addGeo(ctx.side, P.box, b, yaw, col, [it.l * 0.3, 0.9, it.l]);
+    addGeo(ctx.side, P.box, [b[0], b[1] + 0.9, b[2]], yaw, hex3('#e9e6dc'), [it.l * 0.22, 0.7, it.l * 0.4]);
+    if (it.sail) {
+      addGeo(ctx.side, P.cyl, b, 0, hex3('#d8d8d8'), [0.07, it.l * 1.3, 0.07]);
+      addGeo(ctx.side, P.prism, [b[0], b[1] + it.l * 0.75, b[2]], yaw + Math.PI / 2, C2.sail, [0.04, it.l * 1.0, it.l * 0.5]);
+    }
+  },
+  rock(ctx, it, p) {
+    const b = lateral(p, it.side * it.lat, groundY(it.side, it.lat) - it.s * 0.3);
+    addGeo(ctx.side, prims().ball, b, it.rot, it.s > 2.5 ? C2.rock : C2.rock2, [it.s, it.s * 0.7, it.s * 1.2], 0.3, 0.2);
+  },
+  guard(ctx, it, p) {
+    const [r, f] = axes(p.th);
+    box(ctx.side, lateral(p, it.side * it.lat, 0.1), r, f, 0.12, 0.75, 0.12, hex3('#8a8f96'));
+    box(ctx.side, lateral(p, it.side * it.lat, 0.45), r, f, 0.05, 0.3, 3 * SEG_M, hex3('#b8bec6'));
+  },
+  sign(ctx, it, p) {
+    const [r, f] = axes(p.th), b = lateral(p, it.side * it.lat, 0);
+    box(ctx.side, b, r, f, 0.1, 2.2, 0.1, C2.metal);
+    box(ctx.side, [b[0], b[1] + 2.2, b[2]], r, f, 0.06, 0.8, 1.2, hex3('#f0f0f0'));
+    box(ctx.side, [b[0] - r[0] * it.side * 0.01, b[1] + 2.3, b[2] - r[2] * it.side * 0.01], r, f, 0.06, 0.6, 1.0, hex3('#c81e24'));
+  },
+  church(ctx, it, p) {
+    const P = prims(), [r, f] = axes(p.th), b = lateral(p, it.side * it.lat, groundY(it.side, it.lat) - 0.2);
+    box(ctx.side, b, r, f, 10, 9, 18, hex3('#e2d7bf'));
+    addGeo(ctx.side, P.roof, [b[0], b[1] + 10.2, b[2]], -p.th, C.roofs[0], [10.6, 2.6, 18.6]);
+    const t = [b[0] - f[0] * 10, b[1], b[2] - f[2] * 10];
+    box(ctx.side, t, r, f, 4.5, 20, 4.5, hex3('#e2d7bf'));
+    addGeo(ctx.side, P.cone, [t[0], t[1] + 20, t[2]], Math.PI / 4, C.roofs[2], [3.4, 8, 3.4]);
+  },
+  vines(ctx, it, p, a) {
+    const pm = pose(a + Math.round(it.l / SEG_M / 2)), [r, f] = axes(pm.th);
+    box(ctx.side, lateral(pm, it.side * it.lat, groundY(it.side, it.lat) - 0.05), r, f, 0.7, 1.2, it.l, C2.vine, { taper: 0.6 });
+  },
+  pitwall(ctx, it, p) {
+    const [r, f] = axes(p.th);
+    box(ctx.side, lateral(p, it.side * it.lat, 0), r, f, 0.4, 1.1, 3 * SEG_M, hex3('#e8e8e8'));
+    box(ctx.side, lateral(p, it.side * (it.lat + 0.1), 1.1), r, f, 0.05, 1.6, 3 * SEG_M, hex3('#a8b0b8'));
+  },
+  garage(ctx, it, p, a) {
+    const pm = pose(a + Math.round(it.l / SEG_M / 2)), [r, f] = axes(pm.th), o = lateral(pm, it.side * (it.lat + 6), 0);
+    box(ctx.side, o, r, f, 12, 7, it.l, hex3('#e8e8ea'));
+    box(ctx.side, lateral(pm, it.side * (it.lat - 0.02), 0), r, f, 0.1, 4.5, it.l * 0.8, hex3('#22252b'));
+    box(ctx.neon, lateral(pm, it.side * (it.lat - 0.06), 5.2), r, f, 0.06, 1.1, it.l * 0.85, C2.garage[it.col]);
+  },
+  flag(ctx, it, p) {
+    const [r, f] = axes(p.th), b = lateral(p, it.side * it.lat, 0);
+    addGeo(ctx.side, prims().cyl, b, 0, hex3('#d8d8d8'), [0.08, 9, 0.08]);
+    box(ctx.side, [b[0] + f[0] * 1.2, b[1] + 6.8, b[2] + f[2] * 1.2], r, f, 0.04, 1.8, 2.4, C2.flagC[it.col]);
+  }
+});
+/* cyprès (vignobles) : variante d'arbre fin et haut */
+const _treeDraw = DECOR.tree;
+DECOR.tree = function (ctx, it, p, a) {
+  if (it.kind !== 'cypress') return _treeDraw(ctx, it, p, a);
+  const P = prims(), b = lateral(p, it.side * it.lat, groundY(it.side, it.lat) - 0.1);
+  addGeo(ctx.side, P.cyl, b, 0, C.trunk, [0.15, it.h * 0.15, 0.15]);
+  addGeo(ctx.side, P.ball1, [b[0], b[1] + it.h * 0.55, b[2]], 0, C2.cypress, [it.h * 0.1, it.h * 0.5, it.h * 0.1]);
+};
+/* villas colorées (marina, village) */
+const _villaDraw = DECOR.villa;
+DECOR.villa = function (ctx, it, p, a) {
+  if (it.col === undefined) return _villaDraw(ctx, it, p, a);
+  const keep = C.wall, keep2 = C.wall2;
+  C.wall = C2.walls[it.col]; C.wall2 = C2.walls[(it.col + 2) % 6];
+  _villaDraw(ctx, it, p, a);
+  C.wall = keep; C.wall2 = keep2;
+};
+/* balcons des immeubles résidentiels */
+const _bldDraw = DECOR.bld;
+DECOR.bld = function (ctx, b, p, a) {
+  _bldDraw(ctx, b, p, a);
+  if (!b.balcony) return;
+  const pm = pose(a + Math.round(b.len / SEG_M / 2)), [r, f] = axes(pm.th);
+  for (let y = 4; y < b.h - 1; y += 3) box(ctx.side, lateral(pm, b.side * (RW + 6.2), y), r, f, 0.7, 0.12, b.len * 0.85, hex3('#cfcac0'));
+};
+
 /* hauteur du sol (par rapport à la route) à une distance donnée du centre, d'après le profil des bas-côtés */
 function groundY(side, lat) {
-  for (const st of GROUND[MAP.ground](side)) if (lat >= st.a && lat <= st.b) return lerp(st.ya, st.yb, (lat - st.a) / (st.b - st.a));
-  const last = GROUND[MAP.ground](side).slice(-1)[0];
+  const prof = GROUND[MAP.ground](side, curZone);
+  for (const st of prof) if (lat >= st.a && lat <= st.b) return lerp(st.ya, st.yb, (lat - st.a) / (st.b - st.a));
+  const last = prof.slice(-1)[0];
   return last ? last.yb : 0;
 }
 const sandY = (lat) => groundY(1, lat);
