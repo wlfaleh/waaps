@@ -368,7 +368,7 @@ function paintMat(hex, hq) {
 let cubeRT = null, cubeCam = null, cubeTick = 0, cubeRTs = null, cubeW = 0;
 /* deux textures de reflet en alternance : on écrit dans l'une pendant que les matériaux lisent l'autre
    (sinon la carte graphique lit et écrit la même texture : « boucle » et image fausse) */
-const envUsers = () => [...paintMats.values(), MAT.glass, MAT.chrome, MAT.rim].concat(MAT.road && MAT.road.envMap ? [MAT.road] : []);
+const envUsers = () => [...paintMats.values(), MAT.glass, MAT.chrome, MAT.rim, ...envMats].concat(MAT.road && MAT.road.envMap ? [MAT.road] : []);
 function setupReflections() {
   if (cubeRTs || quality !== 'high') return;
   const size = isTouch ? 64 : 128;

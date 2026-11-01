@@ -9,7 +9,7 @@ const PAINTS = [
 const paintById = (id) => PAINTS.find((p) => p.id === id) || PAINTS[0];
 const TRAFFIC_PAINTS = ['#c9ccd2', '#0f1014', '#7b808a', '#a7acb5', '#1d3f8f', '#7a1426', '#2f4b3e', '#3b3f48', '#c9b28a'];
 const CARS = [
-  { id: 'golf', name: 'Golf 8', tag: 'La compacte de référence : équilibrée et précise.', glow: '#00E5FF', paint: 'bleu', style: 'golf', stats: { v: 7, a: 7, m: 8, n: 6 },
+  { id: 'golf', name: 'Golf GTI', tag: 'La compacte sportive de référence : équilibrée et précise.', glow: '#00E5FF', paint: 'bleu', style: 'golf', stats: { v: 7, a: 7, m: 8, n: 6 },
     d: { L: 4.28, W: 1.79, H: 1.46, gc: 0.14, rw: 0.33, oh: 0.86, wb: 2.62, nose: 0.72, belt: 0.98, beltR: 1.02, hood: 1.15, wsl: 0.75, re: -0.33, drop: 0.06, rearOh: 0.18, tail: 1.0, pc: 0.32 } },
   { id: 'x1', name: 'BMW X1', tag: 'SUV premium : haut et solide, un peu moins agile.', glow: '#00E5FF', paint: 'blanc', style: 'x1', stats: { v: 7, a: 8, m: 6, n: 7 },
     d: { L: 4.5, W: 1.85, H: 1.64, gc: 0.2, rw: 0.37, oh: 0.88, wb: 2.69, nose: 0.86, belt: 1.1, beltR: 1.14, hood: 1.25, wsl: 0.72, re: -0.4, drop: 0.05, rearOh: 0.2, tail: 1.1, pc: 0.28 } },
@@ -30,7 +30,7 @@ const CARS = [
    repaint  : false pour garder la couleur d'origine du modèle
    credit   : auteur et licence, affichés dans le garage (obligatoire pour une licence CC-BY) */
 const CAR_MODELS = {
-  golf:   { file: null /* 'models/golf8.glb' */, credit: '' },
+  golf:   { file: 'models/golf-gti/golf-gti.json', rotateY: 180, credit: '« 2016 Volkswagen Golf GTI Clubsport Mk7 » par Ddiaz Design (Sketchfab), licence CC BY-NC-SA 4.0' },
   x1:     { file: null /* 'models/bmw-x1.glb' */, credit: '' },
   clio:   { file: null /* 'models/clio.glb' */, credit: '' },
   troc:   { file: null /* 'models/t-roc.glb' */, credit: '' },

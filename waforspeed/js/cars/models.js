@@ -3,7 +3,8 @@
    sinon la voiture provisoire de procedural.js. Le reste du jeu ne voit pas la différence. */
 'use strict';
 
-const realModels = new Map();   // id -> { root, repaint, tris }
+const realModels = new Map();
+const envMats = new Set();   // matériaux des vrais modèles qui affichent les reflets   // id -> { root, repaint, tris }
 const modelStatus = new Map();  // id -> 'none' | 'loading' | 'ok' | 'error'
 const MODEL_RX = {
   paint: /(car_?paint|paint|body|carros|kaross|exterior|lack)/i,
@@ -73,7 +74,7 @@ function prepareModel(root, car, spec) {
     tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
     for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
       const n = (m.name || '') + ' ' + (o.name || '');
-      if (m.isMeshStandardMaterial && !m.envMap) { m.envMap = MAT.env; m.envMapIntensity = 0.5; m.needsUpdate = true; }
+      if (m.isMeshStandardMaterial) { if (!m.envMap) { m.envMap = MAT.env; m.envMapIntensity = 0.5; m.needsUpdate = true; } envMats.add(m); }
       if (rx.tail.test(n)) m.userData.wfs = 'tail';
       else if (MODEL_RX.head.test(n)) { m.userData.wfs = 'head'; if (m.emissive) { m.emissive.set(0xfff3dc); m.emissiveIntensity = 1; } }
       else if (rx.paint.test(n) && !MODEL_RX.notPaint.test(n)) { m.userData.wfs = 'paint'; repaint = true; }
@@ -85,11 +86,11 @@ function prepareModel(root, car, spec) {
 const repaintCache = new Map();
 function repaintMat(m, hex) {
   const key = m.uuid + hex;
-  if (!repaintCache.has(key)) { const c = m.clone(); c.color.set(hex); repaintCache.set(key, c); }
+  if (!repaintCache.has(key)) { const c = m.clone(); c.color.set(hex); repaintCache.set(key, c); if (c.envMap) envMats.add(c); }
   return repaintCache.get(key);
 }
 /* Le trafic n'utilise les vrais modèles qu'en graphismes « haute » et s'ils sont assez légers. */
-const realInTraffic = (R) => quality === 'high' && R.tris < 120000;
+const realInTraffic = (R) => quality === 'high' && !isTouch && R.tris < 120000;
 
 function realBody(car, paintHex, opts) {
   const R = realModels.get(car.id);
@@ -101,7 +102,7 @@ function realBody(car, paintHex, opts) {
     const arr = Array.isArray(o.material);
     const mats = (arr ? o.material : [o.material]).map((m) => {
       if (m.userData.wfs === 'paint' && R.repaint) return repaintMat(m, paintHex);
-      if (m.userData.wfs === 'tail' && opts.tailMat) { const t = m.clone(); tails.push(t); return t; }
+      if (m.userData.wfs === 'tail' && opts.tailMat) { const t = m.clone(); tails.push(t); if (t.envMap) envMats.add(t); return t; }
       return m;
     });
     o.material = arr ? mats : mats[0];
@@ -116,37 +117,45 @@ function realBody(car, paintHex, opts) {
 /* Roues d'un vrai modèle : on repère les nœuds nommés « wheel », « roue », « tire »…
    et on les accroche à un pivot (braquage) puis à un axe (rotation). Sans nœud de roue,
    la voiture roule simplement sans animation de roues. */
-const WHEEL_RX = /(wheel|roue|tire|tyre|pneu)/i;
+const WHEEL_RX = /(wheel|roue|tire|tyre|pneu|rim)/i;
+/* Roues d'un vrai modèle : on repère les morceaux de roue (nom contenant wheel, roue, tire, rim…),
+   on les regroupe par coin de la voiture, puis chaque roue est accrochée à un pivot (braquage)
+   et à un axe (rotation). Les étriers et le reste ne bougent pas. */
 function rigWheels(obj, car) {
   const spec = CAR_MODELS[car.id] || {};
   const rx = spec.wheel ? new RegExp(spec.wheel, 'i') : WHEEL_RX;
-  const found = [];
-  obj.traverse((o) => {
-    if (!rx.test(o.name || '')) return;
-    for (let p = o.parent; p; p = p.parent) if (found.includes(p)) return;
-    found.push(o);
-  });
   obj.updateMatrixWorld(true);
+  const groups = new Map();
+  obj.traverse((o) => {
+    if (!o.isMesh) return;
+    const name = (o.name || '') + ' ' + (o.parent ? o.parent.name || '' : '');
+    if (!rx.test(name) || /calip|callip|brake|etrier/i.test(name)) return;
+    const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
+    const key = (c.x > 0 ? 'R' : 'L') + (c.z < 0 ? 'F' : 'B');
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(o);
+  });
   const wheels = [];
   let rw = car.d.rw;
-  for (const node of found) {
-    const box = new THREE.Box3().setFromObject(node);
-    if (box.isEmpty()) continue;
+  for (const [key, meshes] of groups) {
+    const box = new THREE.Box3();
+    for (const m of meshes) box.expandByObject(m);
     const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
-    if (sz.y > 1.2 || sz.y < 0.2) continue;
+    if (sz.y > 1.3 || sz.y < 0.25) continue;
     rw = sz.y / 2;
     const steerG = new THREE.Group(); steerG.position.copy(c);
     const spinG = new THREE.Group(); steerG.add(spinG);
     obj.add(steerG); obj.updateMatrixWorld(true);
-    spinG.attach(node);
-    wheels.push({ steer: steerG, spin: spinG, front: c.z < 0 });
+    for (const m of meshes) spinG.attach(m);
+    wheels.push({ steer: steerG, spin: spinG, front: key[1] === 'F' });
   }
   return { wheels, rw };
 }
 
 /* Point d'entrée unique : construit une voiture (vraie ou provisoire) prête à poser sur la piste. */
 function makeCarMesh(car, paintHex, opts = {}) {
-  const body = realBody(car, paintHex, opts) || proceduralBody(car, paintHex, opts);
+  const real = realBody(car, paintHex, opts);
+  const body = real || proceduralBody(car, paintHex, opts);
   const L = car.d.L, Wd = car.d.W;
   const g = new THREE.Group();
   g.rotation.order = 'YXZ';
@@ -170,6 +179,7 @@ function makeCarMesh(car, paintHex, opts = {}) {
     for (const [z, y, w] of [[L / 2 + 0.03, by, 0.2], [-L / 2 - 0.03, fy, 0.16]]) {
       const lamp = new THREE.Mesh(blinkGeo, MAT.blinkOff);
       lamp.scale.set(w, 0.09, 0.04); lamp.position.set(side * (Wd / 2 - 0.1), y, z);
+      if (real) lamp.visible = false;   // le vrai modèle a ses propres feux : on ne garde que le halo
       inner.add(lamp);
       const halo = new THREE.Sprite(MAT.blinkHalo);
       halo.scale.set(1.5, 1.5, 1); halo.position.set(side * (Wd / 2 - 0.05), y, z + Math.sign(z) * 0.08); halo.visible = false;
