@@ -13,7 +13,7 @@ const MAX_SPEED = SEG * 60;
 const ACCEL = MAX_SPEED / 5, BRAKE = -MAX_SPEED, DECEL = -MAX_SPEED / 5;
 const OFF_DECEL = -MAX_SPEED / 2, OFF_LIMIT = MAX_SPEED / 4;
 const CENTRIFUGAL = 0.2;
-const CAR_HIT = 0.26, NEAR_MISS = 0.5;
+const NEAR_MISS = 0.24;   // marge latérale (en demi-route) d'un quasi-contact
 const CHECK_DIST = 100000;
 const LANE_X = [-2 / 3, 0, 2 / 3];
 const KM = 1000 / 0.006, FINISH = 4 * KM;

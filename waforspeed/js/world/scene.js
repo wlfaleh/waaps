@@ -102,7 +102,7 @@ function render3D(dt, t) {
   const latVel = Math.abs(dX) > 0.3 ? 0 : dX * RW / Math.max(dt, 1e-3);
   const targetYaw = clamp(Math.atan2(latVel, Math.max(speed * M, 3)), -0.42, 0.42) + steer * 0.04 * Math.min(1, sp * 2);
   playerYaw += (targetYaw - playerYaw) * Math.min(1, dt * 9);
-  placeOnTrack(playerMesh, sP, playerX, playerYaw);
+  placeOnTrack(playerMesh, sP, playerX, playerYaw + spinYaw);
   const inner = playerMesh.userData.inner;
   inner.rotation.z = steer * 0.045 * Math.min(1, sp + 0.15);
   playerMesh.userData.animWheels(steer * (0.55 - 0.3 * Math.min(sp, 1)), speed * M * dt);
@@ -117,9 +117,15 @@ function render3D(dt, t) {
     if (rel < -20 / M || rel > (VIEW * SEG_M + 30) / M) { m.visible = false; continue; }
     m.visible = true;
     const lat = (car.offset - car.prevOff) * RW / Math.max(dt, 1e-3);
-    const yaw = clamp(Math.atan2(lat, car.speed * M), -0.3, 0.3);
-    placeOnTrack(m, sP + rel, car.offset, yaw);
-    m.userData.animWheels(yaw * 1.6, car.speed * M * dt);
+    const yaw = car.crash ? car.crash.yaw : clamp(Math.atan2(lat, Math.max(car.speed * M, 2)), -0.3, 0.3);
+    placeOnTrack(m, sP + rel, car.offset, yaw, car.crash ? Math.sin(car.crash.t * 9) * Math.max(0, 0.06 - car.crash.t * 0.03) : 0);
+    m.userData.animWheels(car.crash ? 0 : yaw * 1.6, car.speed * M * dt);
+    if (car.crash) {
+      // feux de détresse et fumée du capot
+      m.userData.tailGlow.visible = (t / 1000) % 0.8 < 0.4;
+      car.crash.smoke -= dt;
+      if (car.crash.t < 5 && car.crash.smoke <= 0) { car.crash.smoke = 0.12; const q = trackPoint(sP + rel - car.len * 0.35, car.offset * RW, {}); emitSmoke({ x: q.x, y: q.y + 1.1, z: q.z }, 1); }
+    } else m.userData.tailGlow.visible = true;
     car.prevOff = car.offset;
   }
   // rivaux
@@ -147,6 +153,7 @@ function render3D(dt, t) {
     const d = segAt(a).deco;
     if (d && d.lamp) { const p = pose(a); const q = lateral(p, d.lamp * (RW - 1.9), 7.1); lampLights[li++].position.set(q[0], q[1], q[2]); }
   }
+  updateParticles(dt);
   updateCamera(dt, sP);
   if (composer) { renderPass.scene = scene; renderPass.camera = camera; bloom.threshold = 0.46; bloom.strength = 0.8; composer.render(dt); }
   else renderer.render(scene, camera);

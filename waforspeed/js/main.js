@@ -4,7 +4,10 @@
 /* ================= Boucle ================= */
 let lastT = 0;
 function frame(t) {
-  const dt = Math.min(0.05, Math.max(0, (t - lastT) / 1000));
+  const raw = Math.min(0.05, Math.max(0, (t - lastT) / 1000));
+  // ralenti bref après un accident
+  if (slowmoT > 0) slowmoT -= raw; else timeScale += (1 - timeScale) * Math.min(1, raw * 4);
+  const dt = raw * timeScale;
   lastT = t;
   update(dt);
   if (renderer) render3D(dt, t);
@@ -22,6 +25,7 @@ function boot() {
       boardGeo = new THREE.PlaneGeometry(8, 3.2);
       resetPoses();
       buildPlayer();
+      setupParticles();
       loadRealModels();
       setupComposer();
     } catch (e) { console.error(e); renderer = null; }

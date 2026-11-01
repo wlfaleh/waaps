@@ -147,7 +147,7 @@ function makeCarMesh(car, paintHex, opts = {}) {
   }
   const wheels = body.wheels || [], rw = body.rw || car.d.rw;
   g.userData = {
-    inner, len: L, setBrake: body.setBrake || (() => {}),
+    inner, len: L, tailGlow: tg, setBrake: body.setBrake || (() => {}),
     /* braquage des roues avant (radians, + = à droite) et distance parcourue (mètres) */
     animWheels: (steerAngle, meters) => {
       for (const w of wheels) { if (w.front) w.steer.rotation.y = -steerAngle; w.spin.rotation.x -= meters / rw; }

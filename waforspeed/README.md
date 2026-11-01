@@ -24,8 +24,8 @@ Les scripts sont chargés dans l'ordre de `index.html` et partagent leurs décla
 | `css/style.css` | Tout le style (tokens du skill design, HUD, écrans, garage, radio) |
 | `js/core/` | `config.js` constantes de jeu et d'échelle, `utils.js` petites fonctions |
 | `js/cars/` | `catalog.js` voitures, stats, couleurs et **emplacement des vrais modèles**, `models.js` chargement des modèles GLB et construction de toutes les voitures, `procedural.js` voitures provisoires, `player.js` voiture du joueur |
-| `js/world/` | `track.js` tracé de la piste, `renderer.js` moteur 3D et ville, `scene.js` trafic, rivaux, caméra, rendu de la course, `garage.js` scène du garage, `fx.js` pluie et effets |
-| `js/game/` | `state.js` état de la partie et trafic, `update.js` physique, collisions, checkpoints |
+| `js/world/` | `track.js` tracé de la piste, `renderer.js` moteur 3D et ville, `scene.js` trafic, rivaux, caméra, rendu de la course, `garage.js` scène du garage, `fx.js` pluie et effets, `particles.js` étincelles et fumée des accidents |
+| `js/game/` | `state.js` état de la partie, `traffic.js` trafic simulé (distances de sécurité, changements de file, voitures accidentées), `update.js` physique, chocs et accidents, checkpoints |
 | `js/audio/` | `sfx.js` moteur et effets, `music.js` radio synthwave (Tone.js) et musiques du joueur |
 | `js/ui/` | `hud.js` affichage en course, `screens.js` menus, garage, radio, commandes, `toasts.js` notifications |
 | `js/net/duel.js` | Salons, synchronisation et résultats du duel |
