@@ -93,7 +93,7 @@ function update(dt) {
   const auto = state === 'menu' || state === 'over';
   const playerSeg = findSegment(position + PLAYER_Z);
   const speedPct = speed / MAX_SPEED;
-  const dx = dt * 2.2 * PERF.handling * Math.min(speedPct, 1.1);
+  const dx = dt * 2.2 * PERF.handling * Math.min(Math.abs(speedPct), 1.1);
 
   if (mode === 'duel' && raceStartWall) trafficClock = (performance.now() - raceStartWall) / 1000 - 3;
   else trafficClock += dt;
@@ -120,13 +120,16 @@ function update(dt) {
   if (nitroOn) nitro = Math.max(0, nitro - dt * PERF.nitroBurn);
   const top = MAX_SPEED * PERF.top * (nitroOn ? PERF.nitroMult : 1);
   const accelerating = playing && !locked && input.up && !input.down;
-  braking = playing && !locked && input.down;
+  // frein : ralentit ; maintenu à l'arrêt, il passe la marche arrière
+  reversing = playing && !locked && input.down && !input.up && speed <= 0;
+  braking = playing && !locked && input.down && speed > 0;
   if (auto) speed = lerp(speed, MAX_SPEED * 0.62, Math.min(1, dt));
   else if (state === 'count') speed = 0;
-  else if (locked) speed += BRAKE * 0.45 * dt;
-  else if (braking) speed += BRAKE * dt;
-  else if (accelerating) speed += ACCEL * PERF.acc * (nitroOn ? 2 : 1) * dt;
-  else speed += DECEL * dt;
+  else if (locked) speed = speed > 0 ? Math.max(0, speed + BRAKE * 0.45 * dt) : Math.min(0, speed - BRAKE * 0.45 * dt);
+  else if (reversing) speed = Math.max(REV_MAX, speed - REV_ACC * dt);
+  else if (braking) speed = Math.max(0, speed + BRAKE * dt);
+  else if (accelerating) speed = speed < 0 ? Math.min(0, speed - BRAKE * dt) : speed + ACCEL * PERF.acc * (nitroOn ? 2 : 1) * dt;
+  else speed = speed < 0 ? Math.min(0, speed - DECEL * dt) : speed + DECEL * dt;
   if (speed > top) speed = Math.max(top, speed - MAX_SPEED * 0.5 * dt);
 
   if (Math.abs(playerX) > 1) {
@@ -136,7 +139,7 @@ function update(dt) {
     }
   }
   if (Math.abs(playerX) > MAP.edge) { playerX = Math.sign(playerX) * MAP.edge; speed *= 1 - dt * 2; if (playing) shake = Math.max(shake, reduceMotion ? 0 : 0.12); }
-  speed = clamp(speed, 0, MAX_SPEED * 1.6);
+  speed = clamp(speed, REV_MAX, MAX_SPEED * 1.6);
 
   const pz = position + PLAYER_Z, myLen = myCar.d.L / M, myW = myCar.d.W / (2 * RW);
   for (const car of cars) {

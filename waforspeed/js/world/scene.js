@@ -116,7 +116,7 @@ function render3D(dt, t) {
   playerMesh.userData.animWheels(steer * (0.55 - 0.3 * Math.min(sp, 1)), speed * M * dt);
   inner.rotation.x = reduceMotion ? 0 : (braking ? -0.012 : 0) + Math.sin(t * 0.03) * 0.002 * sp;
   inner.position.y = reduceMotion ? 0 : Math.sin(t * 0.045) * 0.008 * sp;
-  playerMesh.userData.setBrake(braking);
+  playerMesh.userData.setBrake(braking || reversing);
   for (const fl of flames) { fl.visible = nitroOn; if (nitroOn) { const k = 0.7 + Math.random() * 0.6; fl.scale.set(1, 1, k); } }
   // trafic
   for (const car of cars) {

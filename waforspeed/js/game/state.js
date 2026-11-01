@@ -6,7 +6,7 @@ let state = 'menu';
 let position = 0, playerX = 0, speed = 0, steer = 0, dist = 0;
 let timeLeft = 30, nextCp = CHECK_DIST, level = 0, bonus = 0, nitro = 0.4, nitroOn = false;
 let combo = 0, comboTimer = 0, nearCount = 0, maxKmh = 0, shake = 0, flash = 0, overTimer = 0;
-let autoTarget = 0, autoTimer = 0, braking = false;
+let autoTarget = 0, autoTimer = 0, braking = false, reversing = false;
 let best = parseInt(store('waforspeed-best') || '0', 10) || 0;
 let cars = [];
 let raceStartWall = 0;
@@ -27,5 +27,5 @@ function resetRace(kind, seed) {
   addCars(kind === 'menu' ? MAP.traffic.n + 6 : MAP.traffic.n);
   if (renderer) { clearChunks(); resetPoses(); ensureChunks(0, true); camInit = false; setGantry('', '', 0); }
 }
-const score = () => Math.floor(dist * 0.006) * 5 + bonus;
+const score = () => Math.max(0, Math.floor(dist * 0.006)) * 5 + bonus;
 const kmh = () => Math.round(speed / MAX_SPEED * 260);

@@ -24,7 +24,7 @@ function audioInit() {
 }
 function engineUpdate() {
   if (!actx) return;
-  const t = actx.currentTime, p = speed / MAX_SPEED;
+  const t = actx.currentTime, p = Math.abs(speed) / MAX_SPEED;
   const gearPct = (Math.min(p, 1.4) * 4.2) % 1;
   const f = 38 + gearPct * 62 + p * 55 + (nitroOn ? 20 : 0);
   engA.frequency.setTargetAtTime(f, t, 0.06);

@@ -2,7 +2,7 @@
 'use strict';
 
 /* ================= HUD ================= */
-const hud = { tl: $('#timeLabel'), cpl: $('#cpLabel'), sl: $('#scoreLabel'), board: $('#duelBoard'), time: $('#time'), score: $('#score'), combo: $('#combo'), cpn: $('#cpn'), cpbar: $('#cpbar'), kmh: $('#kmh'), nitroPanel: $('#nitroPanel'), speedoBox: $('#speedoBox') };
+const hud = { tl: $('#timeLabel'), cpl: $('#cpLabel'), sl: $('#scoreLabel'), board: $('#duelBoard'), time: $('#time'), score: $('#score'), combo: $('#combo'), cpn: $('#cpn'), cpbar: $('#cpbar'), kmh: $('#kmh'), unit: $('.speedo-read .unit'), nitroPanel: $('#nitroPanel'), speedoBox: $('#speedoBox') };
 const nitroCells = [...document.querySelectorAll('#nitroBar i')];
 const sctx = $('#speedo').getContext('2d');
 const last = {};
@@ -29,7 +29,7 @@ function drawSpeedo(k) {
 const fmtTime = (t) => { const m = Math.floor(t / 60); return m + ':' + (t - m * 60).toFixed(1).padStart(4, '0'); };
 let boardAt = 0;
 function updateHud() {
-  const k = kmh();
+  const k = Math.abs(kmh());
   const duel = mode === 'duel';
   setText('tl', hud.tl, duel ? 'Chrono' : 'Temps');
   setText('cpl', hud.cpl, duel ? 'Arrivée dans' : 'Checkpoint');
@@ -59,6 +59,7 @@ function updateHud() {
   const cpw = (cp * 100).toFixed(1) + '%';
   if (last.cpw !== cpw) { last.cpw = cpw; hud.cpbar.style.width = cpw; }
   setText('kmh', hud.kmh, String(k));
+  setText('unit', hud.unit, speed < -1 ? 'R · KM/H' : 'KM/H');
   const cells = Math.round(nitro * 10);
   if (last.cells !== cells) { last.cells = cells; nitroCells.forEach((el, i) => el.classList.toggle('on', i < cells)); }
   if (last.nitroOn !== nitroOn) { last.nitroOn = nitroOn; hud.nitroPanel.classList.toggle('active', nitroOn); }
