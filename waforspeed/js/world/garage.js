@@ -2,7 +2,7 @@
 'use strict';
 
 /* --- garage --- */
-let gYaw = 0.6, gDrag = null;
+let gYaw = 0.6, gDrag = null, gSlide = 0;
 function buildGarage() {
   gScene = new THREE.Scene();
   gScene.background = new THREE.Color(0x07070c);
@@ -23,13 +23,21 @@ function buildGarage() {
   const s2 = new THREE.SpotLight(0x40e0ff, 1.6, 30, 0.6, 0.6, 1.2); s2.position.set(6, 8, -3); gScene.add(s2);
   const s3 = new THREE.SpotLight(0xffffff, 1.4, 30, 0.5, 0.7, 1.2); s3.position.set(0, 10, 8); gScene.add(s3);
   const cv = $('#game');
-  cv.addEventListener('pointerdown', (e) => { if (state === 'garage') { gDrag = { x: e.clientX, yaw: gYaw }; cv.setPointerCapture(e.pointerId); } });
+  cv.addEventListener('pointerdown', (e) => { if (state === 'garage') { gDrag = { x: e.clientX, yaw: gYaw, t: performance.now() }; cv.setPointerCapture(e.pointerId); } });
   cv.addEventListener('pointermove', (e) => { if (gDrag) gYaw = gDrag.yaw + (e.clientX - gDrag.x) * 0.01; });
-  const end = () => { gDrag = null; };
+  // glisser lent : faire tourner la voiture ; geste rapide : voiture suivante / précédente
+  const end = (e) => {
+    if (gDrag && e && e.type === 'pointerup') {
+      const dx = e.clientX - gDrag.x, dtm = performance.now() - gDrag.t;
+      if (dtm < 320 && Math.abs(dx) > 70) { gYaw = gDrag.yaw; cycleCar(dx < 0 ? 1 : -1); }
+    }
+    gDrag = null;
+  };
   cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
 }
-function setGarageCar() {
+function setGarageCar(dir) {
   if (gCar) gScene.remove(gCar);
+  if (dir) gSlide = dir;
   if (typeof requestModel === 'function') requestModel(myCar.id);
   gCar = makeCarMesh(myCar, myPaint().hex, { glow: myCar.glow, hq: true });
   gCar.position.y = 0.08;
@@ -39,12 +47,18 @@ function setGarageCar() {
 function renderGarage(dt) {
   if (!gDrag && !reduceMotion) gYaw += dt * 0.35;
   if (gCar) updateReflections(gCar.position, gCar);
-  if (gCar) { gCar.rotation.y = gYaw; if (!reduceMotion) gCar.userData.animWheels(Math.sin(performance.now() / 900) * 0.4, 0); }
-  const narrow = W < 760;
-  const portrait = W < H;
-  const dist2 = portrait ? 17 : narrow ? 12 : 9.2;
-  gCamera.position.set(Math.sin(0.5) * dist2, portrait ? 4.6 : narrow ? 3.6 : 2.6, Math.cos(0.5) * dist2);
-  gCamera.lookAt(narrow ? 0 : -1.9, portrait ? -2.6 : narrow ? -0.9 : 0.55, 0);
+  // nouvelle voiture : elle arrive en glissant sur le côté
+  gSlide *= reduceMotion ? 0 : Math.exp(-dt * 7); if (Math.abs(gSlide) < 0.002) gSlide = 0;
+  if (gCar) {
+    gCar.visible = modelStatus.get(myCar.id) === 'ok' || modelStatus.get(myCar.id) === 'error';   // que des vraies voitures : pas de silhouette provisoire
+    gCar.rotation.y = gYaw; gCar.position.x = gSlide * 7;
+    if (!reduceMotion) gCar.userData.animWheels(Math.sin(performance.now() / 900) * 0.4, 0);
+  }
+  const portrait = W < H, narrow = W < 980;
+  const L = myCar.d.L;
+  const dist2 = (portrait ? 3.1 : narrow ? 2.2 : 1.9) * L + (portrait ? 0 : 1);
+  gCamera.position.set(Math.sin(0.55) * dist2, portrait ? 3.4 : 2.3, Math.cos(0.55) * dist2);
+  gCamera.lookAt(0, portrait ? -1.2 : narrow ? -0.9 : -0.35, 0);
   if (composer) { renderPass.scene = gScene; renderPass.camera = gCamera; bloom.threshold = 0.7; bloom.strength = 0.55; composer.render(dt); }
   else renderer.render(gScene, gCamera);
   fctx.clearRect(0, 0, fx.width, fx.height);
