@@ -4,7 +4,8 @@
 /* ================= Rendu 3D ================= */
 let renderer = null, scene = null, camera = null, composer = null, renderPass = null, bloom = null;
 let gScene = null, gCamera = null, gCar = null, gRing = null;
-let quality = store('waforspeed-quality') || (isTouch ? 'low' : 'high');
+let quality = store('waforspeed-quality') || 'high';
+const qualityChosen = !!store('waforspeed-quality');
 let VIEW = quality === 'high' ? 470 : 330;
 const MAT = {};
 const TEXS = {};
@@ -158,6 +159,19 @@ function makeTextures() {
     for (const x of [256 / 3, 512 / 3]) g.fillRect(x - 2, 0, 4, 170);
     TEXS.road = canvasTex(c, true);
   }
+  // texture de détail en niveaux de gris, multipliée par la couleur du sol et des décors
+  {
+    const [c, g] = makeCanvas(256, 256), R = mulberry32(12);
+    g.fillStyle = '#e6e6e6'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 40; i++) {
+      const x = R() * 256, y = R() * 256, r = 20 + R() * 60, v = 200 + R() * 55 | 0;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, `rgba(${v},${v},${v},.55)`); gr.addColorStop(1, `rgba(${v},${v},${v},0)`);
+      for (const dx of [-256, 0, 256]) for (const dy of [-256, 0, 256]) { g.save(); g.translate(dx, dy); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); g.restore(); }
+    }
+    for (let i = 0; i < 9000; i++) { const v = 150 + R() * 105 | 0; g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(R() * 256, R() * 256, 1 + (R() < 0.2), 1 + (R() < 0.2)); }
+    TEXS.detail = canvasTex(c, true);
+  }
   // halo radial
   {
     const [c, g] = makeCanvas(128, 128);
@@ -227,7 +241,10 @@ function textCanvas(text, col, w, h, font, bg = '#0b0c14') {
 }
 
 function setupThree() {
-  renderer = new THREE.WebGLRenderer({ canvas: $('#game'), antialias: !isTouch, powerPreference: 'high-performance' });
+  renderer = new THREE.WebGLRenderer({ canvas: $('#game'), antialias: true, powerPreference: 'high-performance' });
+  // ombres portées douces (soleil de jour)
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.setClearColor(0x0a0812);
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0a0812);
@@ -235,7 +252,7 @@ function setupThree() {
   makeTextures();
 
   MAT.road = new THREE.MeshStandardMaterial({ map: TEXS.road, roughness: 0.55, metalness: 0.2, color: 0xffffff });
-  MAT.side = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.05 });
+  MAT.side = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05, map: TEXS.detail });
   MAT.bld = new THREE.MeshBasicMaterial({ map: TEXS.facade, vertexColors: true });
   MAT.bldDay = new THREE.MeshLambertMaterial({ map: TEXS.facadeDay, vertexColors: true });
   MAT.ads = TEXS.ads.map((t) => new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }));
@@ -323,6 +340,16 @@ function applyEnv() {
   skyline.material.map = sk; skyline.material.needsUpdate = true;
   hemi.color.set(E.hemiSky); hemi.groundColor.set(E.hemiGround); hemi.intensity = E.hemiI;
   sunLight.color.set(E.sunColor); sunLight.intensity = E.sunI;
+  const shadows = quality === 'high' && E.sunDisc;
+  sunLight.castShadow = shadows;
+  if (shadows) {
+    const s = sunLight.shadow, sz = isTouch ? 1024 : 2048;
+    if (s.mapSize.x !== sz) { s.mapSize.set(sz, sz); if (s.map) { s.map.dispose(); s.map = null; } }
+    Object.assign(s.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 260 });
+    s.camera.updateProjectionMatrix();
+    s.bias = -0.0004; s.normalBias = 0.04; s.radius = 3;
+  }
+  MAT.shadow.opacity = shadows ? 0.35 : 0.75;
   sunDisc.visible = E.sunDisc; moonDisc.visible = E.moon; stars.visible = E.stars; clouds.visible = E.clouds;
   water.visible = MAP.ground === 'beach'; water.material.color.set(E.water);
   MAT.road.map = MAP.road === 'circuit' ? TEXS.roadCircuit : TOD === 'jour' ? TEXS.roadDay : TEXS.road; MAT.road.needsUpdate = true;
@@ -334,7 +361,12 @@ function setupComposer() {
   composer = null; bloom = null;
   if (quality !== 'high' || !THREE.EffectComposer || !THREE.UnrealBloomPass) return;
   try {
-    composer = new THREE.EffectComposer(renderer);
+    const caps = renderer.capabilities;
+    const rt = caps.isWebGL2 && THREE.WebGLMultisampleRenderTarget
+      ? new THREE.WebGLMultisampleRenderTarget(Math.max(1, W * DPR), Math.max(1, H * DPR), { format: THREE.RGBAFormat })
+      : undefined;
+    if (rt) rt.samples = 4;
+    composer = new THREE.EffectComposer(renderer, rt);
     renderPass = new THREE.RenderPass(scene, camera);
     composer.addPass(renderPass);
     bloom = new THREE.UnrealBloomPass(new THREE.Vector2(W, H), 0.8, 0.45, 0.46);
@@ -344,7 +376,7 @@ function setupComposer() {
 }
 function onResize() {
   W = innerWidth; H = innerHeight;
-  DPR = Math.min(window.devicePixelRatio || 1, quality === 'high' ? 1.5 : 1);
+  DPR = Math.min(window.devicePixelRatio || 1, quality === 'high' ? (isTouch ? 2 : 1.75) : 1.25);
   if (renderer) {
     renderer.setPixelRatio(DPR);
     renderer.setSize(W, H, false);
@@ -362,6 +394,16 @@ const chunks = new Map();
 const TINTS = [[1, 0.96, 0.9], [0.85, 0.92, 1], [0.72, 0.72, 0.8], [1, 0.9, 0.85]];
 function lateral(p, lat, dy = 0) { return [p.x + Math.cos(p.th) * lat, p.y + dy, p.z + Math.sin(p.th) * lat]; }
 function axes(th) { return [[Math.cos(th), 0, Math.sin(th)], [Math.sin(th), 0, -Math.cos(th)]]; }
+/* coordonnées de texture tirées de la position (1 répétition = 3 m) : donne du grain au sol et aux décors */
+function worldUV(geo) {
+  const p = geo.attributes.position.array, n = geo.attributes.normal.array, uv = new Float32Array(p.length / 3 * 2);
+  for (let i = 0, j = 0; i < p.length; i += 3, j += 2) {
+    const up = Math.abs(n[i + 1]) > 0.6;
+    uv[j] = (up ? p[i] : p[i] + p[i + 2]) / 3;
+    uv[j + 1] = (up ? p[i + 2] : p[i + 1]) / 3;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
 function buildChunk(ci) {
   const a0 = ci * CH, a1 = a0 + CH;
   const road = newBuf(), side = newBuf(), bld = newBuf(), neon = newBuf(), pool = newBuf();
@@ -390,8 +432,16 @@ function buildChunk(ci) {
     if (!deco) continue;
     for (const it of deco.items) { const fn = DECOR[it.t]; if (fn) fn(ctx, it, p0, a); }
   }
-  const add = (B, mat, uv) => { if (B.p.length) group.add(new THREE.Mesh(toGeo(B, uv), mat)); };
-  add(road, MAT.road, true); add(side, MAT.side, false); add(bld, ENV.windowsLit ? MAT.bld : MAT.bldDay, true); add(neon, MAT.neon, false);
+  const add = (B, mat, uv, cast, recv) => {
+    if (!B.p.length) return null;
+    const m = new THREE.Mesh(toGeo(B, uv), mat);
+    m.castShadow = !!cast; m.receiveShadow = !!recv;
+    group.add(m); return m;
+  };
+  add(road, MAT.road, true, false, true);
+  const sm = add(side, MAT.side, false, true, true);
+  if (sm) worldUV(sm.geometry);
+  add(bld, ENV.windowsLit ? MAT.bld : MAT.bldDay, true, true, !ENV.windowsLit); add(neon, MAT.neon, false);
   if (ENV.poolK > 0) add(pool, MAT.pool, true);
   group.userData.rotors = ctx.rotors;
   scene.add(group);

@@ -136,6 +136,7 @@ function makeCarMesh(car, paintHex, opts = {}) {
   g.rotation.order = 'YXZ';
   const inner = new THREE.Group();
   inner.add(body.object);
+  body.object.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = !o.material.isMeshBasicMaterial; } });
   g.add(inner);
   const sh = new THREE.Mesh(shadowGeo, MAT.shadow);
   sh.scale.set(Wd * 1.5, 1, L * 1.25); sh.position.y = 0.02; g.add(sh);
