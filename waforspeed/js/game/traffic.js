@@ -19,7 +19,7 @@ function addCars(n) {
   for (let i = 0; i < n; i++) {
     const R = mulberry32((Math.imul(trafficSeed, 7919) + Math.imul(cars.length + 1, 104729)) >>> 0);
     const type = Math.floor(R() * CARS.length), len = CARS[type].d.L / M;
-    const want = MAX_SPEED * (0.28 + R() * 0.27);
+    const want = MAX_SPEED * (MAP.traffic.min + R() * (MAP.traffic.max - MAP.traffic.min));
     const lane = Math.floor(R() * LANES);
     let z = 0;
     for (let k = 0; k < 24; k++) {

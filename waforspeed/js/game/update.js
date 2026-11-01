@@ -135,7 +135,7 @@ function update(dt) {
       if (sp.collide && Math.abs(playerX - sp.offset) < sp.hit && speed > MAX_SPEED / 6) { crash(); break; }
     }
   }
-  if (Math.abs(playerX) > 1.7) { playerX = Math.sign(playerX) * 1.7; speed *= 1 - dt * 2; if (playing) shake = Math.max(shake, reduceMotion ? 0 : 0.12); }
+  if (Math.abs(playerX) > MAP.edge) { playerX = Math.sign(playerX) * MAP.edge; speed *= 1 - dt * 2; if (playing) shake = Math.max(shake, reduceMotion ? 0 : 0.12); }
   speed = clamp(speed, 0, MAX_SPEED * 1.6);
 
   const pz = position + PLAYER_Z, myLen = myCar.d.L / M, myW = myCar.d.W / (2 * RW);

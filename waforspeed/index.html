@@ -119,6 +119,23 @@
 </div>
 <p class="radio-msg" id="radioMsg" hidden></p>
 
+<section class="screen screen--garage" id="mapSel" hidden aria-labelledby="mapName">
+  <div class="screen-inner">
+    <p class="eyebrow">Choisis ton terrain</p>
+    <h2 class="big" id="mapName">Ville néon</h2>
+    <p class="intro" id="mapDesc"></p>
+    <div class="map-grid" id="mapGrid" role="group" aria-label="Terrains"></div>
+    <div class="tod" role="group" aria-label="Moment de la journée">
+      <button class="tod-btn" data-tod="jour" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Jour</button>
+      <button class="tod-btn" data-tod="nuit" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>Nuit</button>
+    </div>
+    <div class="actions">
+      <button class="btn" id="mapGo">Rouler</button>
+      <button class="btn btn--ghost" id="mapBack">Retour</button>
+    </div>
+  </div>
+</section>
+
 <section class="screen" id="pause" hidden aria-labelledby="pauseTitle">
   <div class="screen-inner">
     <p class="eyebrow">Course en pause</p>
@@ -175,6 +192,7 @@
     <div class="stack" id="lobbyRoom" hidden>
       <div><span class="label">Code du salon</span><div class="room-code" id="roomCode">----</div></div>
       <div class="car-line"><span class="label">Ta voiture</span><strong id="lobbyCar">Golf 8</strong><button class="btn btn--ghost" id="lobbyGarage">Changer</button></div>
+      <div class="car-line"><span class="label">Terrain</span><strong id="lobbyMap">Ville néon · Nuit</strong><button class="btn btn--ghost" id="lobbyMapBtn">Changer</button><span class="note" id="lobbyMapNote"></span></div>
       <ul class="players" id="players"></ul>
       <p class="note" id="roomNote"></p>
       <div class="actions">
@@ -209,6 +227,8 @@
 <script src="js/core/utils.js"></script>
 <script src="js/cars/catalog.js"></script>
 <script src="js/world/track.js"></script>
+<script src="js/world/maps.js"></script>
+<script src="js/world/decor.js"></script>
 <script src="js/world/renderer.js"></script>
 <script src="js/cars/procedural.js"></script>
 <script src="js/cars/models.js"></script>

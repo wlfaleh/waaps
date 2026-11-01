@@ -24,7 +24,7 @@ function resetRace(kind, seed) {
   position = 0; playerX = 0; speed = kind === 'menu' ? MAX_SPEED * 0.6 : 0; steer = 0; dist = 0; raceTime = 0;
   timeLeft = 30; nextCp = CHECK_DIST; level = 0; bonus = 0; nitro = 0.4; nitroOn = false;
   combo = 0; comboTimer = 0; nearCount = 0; maxKmh = 0; shake = 0; flash = 0; overTimer = 0; lastCount = null;
-  addCars(kind === 'menu' ? 50 : mode === 'duel' ? 55 : 42);
+  addCars(kind === 'menu' ? MAP.traffic.n + 6 : MAP.traffic.n);
   if (renderer) { clearChunks(); resetPoses(); ensureChunks(0, true); camInit = false; setGantry('', '', 0); }
 }
 const score = () => Math.floor(dist * 0.006) * 5 + bonus;

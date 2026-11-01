@@ -2,7 +2,7 @@
 'use strict';
 
 /* ================= Écrans & états ================= */
-const screens = { menu: $('#menu'), garage: $('#garage'), pause: $('#pause'), over: $('#over'), lobby: $('#lobby'), duelOver: $('#duelOver') };
+const screens = { menu: $('#menu'), garage: $('#garage'), mapSel: $('#mapSel'), pause: $('#pause'), over: $('#over'), lobby: $('#lobby'), duelOver: $('#duelOver') };
 const countEl = $('#countdown');
 function showCount(txt) {
   countEl.hidden = !txt;
@@ -98,7 +98,7 @@ function renderGarageUI() {
   }
   for (const b of pr.children) b.setAttribute('aria-pressed', String(b.dataset.id === myPaint().id));
   $('#paintName').textContent = myPaint().name;
-  $('#garageGo').textContent = garageFor === 'duel' ? 'Valider' : garageFor === 'look' ? 'Valider' : 'Rouler';
+  $('#garageGo').textContent = garageFor === 'solo' ? 'Suivant' : 'Valider';
   $('#lobbyCar').textContent = myCar.name;
 }
 function selectPaint(id) {
@@ -125,11 +125,62 @@ function openGarage(forWhat) {
   if (cur) cur.focus({ preventScroll: true });
 }
 function leaveGarage(go) {
-  if (garageFor === 'solo' && go) { startRace(); return; }
+  if (garageFor === 'solo' && go) { openMapSel('solo'); return; }
   if (garageFor === 'duel') { state = 'menu'; mode = 'solo'; resetRace('menu', 7); show('lobby'); renderLobby(); $('#readyBtn').focus({ preventScroll: true }); return; }
   toMenu();
 }
 $('#garageGo').addEventListener('click', () => leaveGarage(true));
+
+/* ---------- Choix du terrain et du moment ---------- */
+let mapFor = 'solo';
+function renderMapUI() {
+  $('#mapName').textContent = MAP.name;
+  $('#mapDesc').textContent = MAP.desc;
+  const grid = $('#mapGrid');
+  if (!grid.children.length) {
+    for (const m of MAPS) {
+      const b = document.createElement('button'); b.className = 'map-card'; b.dataset.id = m.id;
+      const art = document.createElement('span'); art.className = 'map-art';
+      const nm = document.createElement('span'); nm.textContent = m.name;
+      b.append(art, nm);
+      b.addEventListener('click', () => pickMap(m.id, TOD));
+      grid.appendChild(b);
+    }
+  }
+  const k = TOD === 'nuit' ? 0 : 1;
+  for (const b of grid.children) {
+    const m = mapById(b.dataset.id), art = b.firstChild;
+    b.setAttribute('aria-pressed', String(m === MAP));
+    art.style.setProperty('--sky', m.art.sky[k]); art.style.setProperty('--ground', m.art.ground[k]);
+    art.style.setProperty('--road', m.road === 'circuit' ? (k ? '#55585f' : '#2a2c31') : (k ? '#45474d' : '#1c1e26'));
+    art.style.setProperty('--accent', m.art.accent);
+  }
+  for (const b of document.querySelectorAll('.tod-btn')) b.setAttribute('aria-pressed', String(b.dataset.tod === TOD));
+  $('#mapGo').textContent = mapFor === 'solo' ? 'Rouler' : 'Valider';
+}
+function pickMap(id, tod) {
+  if (setMap(id, tod)) resetRace('menu', 7);
+  renderMapUI();
+  if (sub && iAmHost) sub.presence({ map: MAP.id, tod: TOD }).catch(() => {});
+}
+function openMapSel(forWhat) {
+  audioInit();
+  mapFor = forWhat;
+  state = 'menu'; mode = 'solo';
+  show('mapSel');
+  renderMapUI();
+  const cur = [...$('#mapGrid').children].find((b) => b.dataset.id === MAP.id);
+  if (cur) cur.focus({ preventScroll: true });
+}
+document.querySelectorAll('.tod-btn').forEach((b) => b.addEventListener('click', () => pickMap(MAP.id, b.dataset.tod)));
+$('#mapGo').addEventListener('click', () => {
+  if (mapFor === 'solo') { startRace(); return; }
+  show('lobby'); renderLobby(); $('#readyBtn').focus({ preventScroll: true });
+});
+$('#mapBack').addEventListener('click', () => {
+  if (mapFor === 'solo') { openGarage('solo'); return; }
+  show('lobby'); renderLobby();
+});
 $('#garageBack').addEventListener('click', () => leaveGarage(false));
 
 $('#startBtn').addEventListener('click', () => openGarage('solo'));

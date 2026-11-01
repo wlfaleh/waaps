@@ -12,7 +12,7 @@ function drawFx(dt) {
   const w = fx.width, h = fx.height;
   fctx.clearRect(0, 0, w, h);
   const p = speed / MAX_SPEED;
-  if (rain.length) {
+  if (rain.length && ENV.rain) {
     const slant = (-0.12 - steer * 0.25) * (0.4 + p);
     fctx.strokeStyle = 'rgba(170,190,255,.2)'; fctx.lineWidth = Math.max(1, w / innerWidth); fctx.beginPath();
     for (const d of rain) {
@@ -34,7 +34,7 @@ function drawFx(dt) {
     fctx.stroke();
   }
   const v = fctx.createRadialGradient(w / 2, h * 0.55, Math.min(w, h) * 0.38, w / 2, h * 0.55, Math.max(w, h) * 0.78);
-  v.addColorStop(0, 'rgba(5,6,10,0)'); v.addColorStop(1, nitroOn ? 'rgba(0,30,40,.5)' : 'rgba(5,6,10,.55)');
+  v.addColorStop(0, 'rgba(5,6,10,0)'); v.addColorStop(1, nitroOn ? 'rgba(0,30,40,.5)' : `rgba(5,6,10,${ENV.vignette})`);
   fctx.fillStyle = v; fctx.fillRect(0, 0, w, h);
   if (flash > 0) { fctx.fillStyle = `rgba(255,31,75,${flash * 0.28})`; fctx.fillRect(0, 0, w, h); }
 }

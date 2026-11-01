@@ -97,6 +97,57 @@ function makeTextures() {
     g.fillStyle = '#07080c'; g.fillRect(0, 496, 16, 16);
     TEXS.facade = canvasTex(c, true);
   }
+  // façade de jour : vitres qui reflètent le ciel, encadrements clairs
+  {
+    const [c, g] = makeCanvas(512, 512), R = mulberry32(32);
+    g.fillStyle = '#b9b6b0'; g.fillRect(0, 0, 512, 512);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const k = R();
+      const gr = g.createLinearGradient(0, y * 32 + 6, 0, y * 32 + 26);
+      gr.addColorStop(0, k < 0.5 ? '#6f8fae' : '#57718c'); gr.addColorStop(1, k < 0.5 ? '#3b4f66' : '#2f3e52');
+      g.fillStyle = gr; g.fillRect(x * 32 + 5, y * 32 + 6, 22, 20);
+      g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(x * 32 + 5, y * 32 + 6, 22, 3);
+    }
+    g.fillStyle = '#55524e'; g.fillRect(0, 496, 16, 16);
+    TEXS.facadeDay = canvasTex(c, true);
+  }
+  // route de jour : asphalte sec, sans flaques
+  {
+    const [c, g] = makeCanvas(256, 512), R = mulberry32(7);
+    g.fillStyle = '#35373d'; g.fillRect(0, 0, 256, 512);
+    for (let i = 0; i < 2600; i++) { const v = 44 + R() * 22 | 0; g.fillStyle = `rgb(${v},${v + 1},${v + 4})`; g.fillRect(R() * 256, R() * 512, 2, 2); }
+    g.fillStyle = 'rgba(236,238,242,.9)'; g.fillRect(5, 0, 4, 512); g.fillRect(247, 0, 4, 512);
+    for (const x of [256 / 3, 512 / 3]) g.fillRect(x - 2, 0, 4, 170);
+    TEXS.roadDay = canvasTex(c, true);
+  }
+  // asphalte de circuit : plus clair, sans pointillés
+  {
+    const [c, g] = makeCanvas(256, 512), R = mulberry32(6);
+    g.fillStyle = '#2b2d33'; g.fillRect(0, 0, 256, 512);
+    for (let i = 0; i < 2600; i++) { const v = 34 + R() * 20 | 0; g.fillStyle = `rgb(${v},${v + 1},${v + 4})`; g.fillRect(R() * 256, R() * 512, 2, 2); }
+    g.fillStyle = 'rgba(16,17,20,.35)'; g.fillRect(70, 0, 30, 512); g.fillRect(150, 0, 30, 512);
+    g.fillStyle = 'rgba(236,238,242,.95)'; g.fillRect(4, 0, 6, 512); g.fillRect(246, 0, 6, 512);
+    TEXS.roadCircuit = canvasTex(c, true);
+  }
+  // nuage
+  {
+    const [c, g] = makeCanvas(256, 128), R = mulberry32(9);
+    for (let i = 0; i < 26; i++) {
+      const x = 40 + R() * 176, y = 50 + R() * 40, r = 18 + R() * 30;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, 'rgba(255,255,255,.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    TEXS.cloud = canvasTex(c);
+  }
+  // panneaux publicitaires du circuit
+  TEXS.ads = AD_TEXTS.map(([t, bg, fg]) => {
+    const [c, g] = makeCanvas(1024, 112);
+    g.fillStyle = bg; g.fillRect(0, 0, 1024, 112);
+    g.fillStyle = fg; g.font = 'italic 700 80px Rajdhani, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (const x of [256, 768]) g.fillText(t, x, 60);
+    return canvasTex(c);
+  });
   // route : largeur 15 m, 9 m de long par répétition
   {
     const [c, g] = makeCanvas(256, 512), R = mulberry32(5);
@@ -129,7 +180,39 @@ function makeTextures() {
     }
     TEXS.skyline = canvasTex(c, true);
   }
+  TEXS.skylines = {
+    'city-nuit': TEXS.skyline,
+    'city-jour': skylineTex('city', '#8e9bb0', '#a9b4c4', 19),
+    'coast-jour': skylineTex('coast', '#7f9db6', '#9fb6c9', 23),
+    'coast-nuit': skylineTex('coast', '#141a2b', '#1b2236', 23),
+    'hills-jour': skylineTex('hills', '#7d9a6a', '#a3b8a4', 29),
+    'hills-nuit': skylineTex('hills', '#0f1517', '#151c22', 29)
+  };
   TEXS.boards = BOARD_TEXTS.map(([t, col]) => canvasTex(textCanvas(t, col, 512, 200, 'italic 700 96px Rajdhani, "Arial Narrow", sans-serif')));
+}
+/* silhouettes lointaines : ville, côte (caps et îles) ou collines */
+function skylineTex(kind, near, far, seed) {
+  const [c, g] = makeCanvas(2048, 256), R = mulberry32(seed);
+  if (kind === 'city') {
+    for (const [col, k] of [[far, 0.7], [near, 1]]) {
+      let x = 0;
+      while (x < 2048) { const bw = 20 + R() * 70, bh = (40 + R() * 200) * k; g.fillStyle = col; g.fillRect(x, 256 - bh, bw + 1, bh); x += bw + R() * 6; }
+    }
+  } else {
+    const layers = kind === 'coast' ? [[far, 0.35], [near, 0.22]] : [[far, 0.55], [near, 0.38]];
+    for (const [col, amp] of layers) {
+      g.fillStyle = col; g.beginPath(); g.moveTo(0, 256);
+      const ph = R() * 10, ph2 = R() * 10;
+      for (let x = 0; x <= 2048; x += 8) {
+        const u = x / 2048 * Math.PI * 2;
+        let h = (Math.sin(u * 3 + ph) * 0.5 + Math.sin(u * 7 + ph2) * 0.3 + Math.sin(u * 13) * 0.12 + 1) * 0.5;
+        if (kind === 'coast' && Math.sin(u * 2 + ph) < 0.3) h *= 0.08;
+        g.lineTo(x, 256 - 18 - h * 256 * amp);
+      }
+      g.lineTo(2048, 256); g.closePath(); g.fill();
+    }
+  }
+  return canvasTex(c, true);
 }
 function textCanvas(text, col, w, h, font, bg = '#0b0c14') {
   const [c, g] = makeCanvas(w, h);
@@ -154,6 +237,8 @@ function setupThree() {
   MAT.road = new THREE.MeshStandardMaterial({ map: TEXS.road, roughness: 0.55, metalness: 0.2, color: 0xffffff });
   MAT.side = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.05 });
   MAT.bld = new THREE.MeshBasicMaterial({ map: TEXS.facade, vertexColors: true });
+  MAT.bldDay = new THREE.MeshLambertMaterial({ map: TEXS.facadeDay, vertexColors: true });
+  MAT.ads = TEXS.ads.map((t) => new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }));
   MAT.neon = new THREE.MeshBasicMaterial({ vertexColors: true });
   MAT.pool = new THREE.MeshBasicMaterial({ map: TEXS.radial, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
   MAT.boards = TEXS.boards.map((t) => new THREE.MeshBasicMaterial({ map: t }));
@@ -161,8 +246,8 @@ function setupThree() {
   MAT.tailGlow = new THREE.MeshBasicMaterial({ map: TEXS.radial, color: 0xff2040, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
   makeCarMaterials();
 
-  scene.add(new THREE.HemisphereLight(0x46327a, 0x08080e, 0.75));
-  const moon = new THREE.DirectionalLight(0x8a96ff, 0.35); moon.position.set(-40, 80, 30); scene.add(moon);
+  hemi = new THREE.HemisphereLight(0x46327a, 0x08080e, 0.75); scene.add(hemi);
+  sunLight = new THREE.DirectionalLight(0x8a96ff, 0.35); sunLight.position.set(-40, 80, 30); scene.add(sunLight); scene.add(sunLight.target);
   lampLights = [];
   for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0xffb46b, 1.1, 26, 2); scene.add(l); lampLights.push(l); }
 
@@ -176,6 +261,7 @@ function setupThree() {
       cols.push(c.r, c.g, c.b);
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+    skyGeo = g;
     sky = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
     sky.renderOrder = -2; scene.add(sky);
     TEXS.skyline.repeat.set(4, 1);
@@ -183,12 +269,67 @@ function setupThree() {
       new THREE.MeshBasicMaterial({ map: TEXS.skyline, transparent: true, side: THREE.BackSide, fog: false, depthWrite: false }));
     skyline.renderOrder = -1; scene.add(skyline);
   }
-  setFog();
+  // soleil, lune, étoiles, nuages, mer : suivent la caméra (décor à l'infini)
+  sunDisc = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEXS.radial, color: 0xfff4d8, fog: false, depthWrite: false, blending: THREE.AdditiveBlending, transparent: true }));
+  sunDisc.scale.set(170, 170, 1); sunDisc.renderOrder = -1; scene.add(sunDisc);
+  moonDisc = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEXS.radial, color: 0xdfe6ff, fog: false, depthWrite: false, transparent: true }));
+  moonDisc.scale.set(60, 60, 1); moonDisc.renderOrder = -1; scene.add(moonDisc);
+  {
+    const R = mulberry32(77), pts = [];
+    for (let i = 0; i < 700; i++) { const u = R() * Math.PI * 2, v = 0.08 + R() * 0.9; pts.push(Math.cos(u) * Math.cos(v) * 900, Math.sin(v) * 900, Math.sin(u) * Math.cos(v) * 900); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    stars = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.85, depthWrite: false }));
+    stars.renderOrder = -1; scene.add(stars);
+  }
+  clouds = new THREE.Group();
+  {
+    const R = mulberry32(55);
+    for (let i = 0; i < 16; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEXS.cloud, fog: false, depthWrite: false, transparent: true, opacity: 0.85 }));
+      const u = R() * Math.PI * 2, d = 600 + R() * 250;
+      s.position.set(Math.cos(u) * d, 90 + R() * 160, Math.sin(u) * d); s.scale.set(260 + R() * 200, 110 + R() * 60, 1);
+      clouds.add(s);
+    }
+  }
+  scene.add(clouds);
+  water = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshStandardMaterial({ color: 0x1e7fa8, roughness: 0.18, metalness: 0.2 }));
+  water.rotation.x = -Math.PI / 2; scene.add(water);
+  adGeo = new THREE.PlaneGeometry(11, 1.2);
+  applyEnv();
   buildGarage();
   onResize();
 }
-let sky = null, skyline = null, lampLights = [];
-function setFog() { scene.fog = new THREE.Fog(0x120d1d, 40, quality === 'high' ? 540 : 380); VIEW = quality === 'high' ? 470 : 330; }
+let sky = null, skyGeo = null, skyline = null, lampLights = [], hemi = null, sunLight = null, sunDisc = null, moonDisc = null, stars = null, clouds = null, water = null;
+function setFog() {
+  VIEW = quality === 'high' ? 470 : 330;
+  if (ENV) scene.fog = new THREE.Fog(new THREE.Color(ENV.fog), ENV.fogNear, ENV.fogFar);
+}
+/* applique l'ambiance (ENV) de la carte : ciel, lumière, brouillard, matériaux */
+function applyEnv() {
+  ENV = envFor(MAP, TOD);
+  const E = ENV;
+  scene.background = new THREE.Color(E.fog);
+  setFog();
+  const cols = skyGeo.attributes.color, pos = skyGeo.attributes.position;
+  const top = new THREE.Color(E.skyTop), mid = new THREE.Color(E.skyMid), hor = new THREE.Color(E.skyHor), c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 1000;
+    if (y > 0.25) c.copy(mid).lerp(top, clamp((y - 0.25) / 0.6, 0, 1)); else c.copy(hor).lerp(mid, clamp((y + 0.05) / 0.3, 0, 1));
+    cols.setXYZ(i, c.r, c.g, c.b);
+  }
+  cols.needsUpdate = true;
+  const sk = TEXS.skylines[MAP.skyline + '-' + TOD] || TEXS.skyline;
+  sk.repeat.set(4, 1);
+  skyline.material.map = sk; skyline.material.needsUpdate = true;
+  hemi.color.set(E.hemiSky); hemi.groundColor.set(E.hemiGround); hemi.intensity = E.hemiI;
+  sunLight.color.set(E.sunColor); sunLight.intensity = E.sunI;
+  sunDisc.visible = E.sunDisc; moonDisc.visible = E.moon; stars.visible = E.stars; clouds.visible = E.clouds;
+  water.visible = MAP.ground === 'beach'; water.material.color.set(E.water);
+  MAT.road.map = MAP.road === 'circuit' ? TEXS.roadCircuit : TOD === 'jour' ? TEXS.roadDay : TEXS.road; MAT.road.needsUpdate = true;
+  MAT.neon.color.setScalar(E.neonK);
+  MAT.pool.opacity = E.poolK;
+  for (const l of lampLights) l.visible = E.lamps;
+}
 function setupComposer() {
   composer = null; bloom = null;
   if (quality !== 'high' || !THREE.EffectComposer || !THREE.UnrealBloomPass) return;
@@ -216,93 +357,50 @@ function onResize() {
 }
 addEventListener('resize', onResize);
 
-/* --- tronçons de ville (chunks) --- */
+/* --- tronçons de décor (chunks) --- */
 const chunks = new Map();
 const TINTS = [[1, 0.96, 0.9], [0.85, 0.92, 1], [0.72, 0.72, 0.8], [1, 0.9, 0.85]];
-const KERB_A = hex3('#8a3a08'), KERB_B = hex3('#2a2420'), WALK = hex3('#1b1d26'), GROUND = hex3('#0b0c11');
-const POLE = hex3('#2a2e3b'), LAMP = hex3('#ffd9a8'), POOL = [0.5, 0.32, 0.16];
 function lateral(p, lat, dy = 0) { return [p.x + Math.cos(p.th) * lat, p.y + dy, p.z + Math.sin(p.th) * lat]; }
 function axes(th) { return [[Math.cos(th), 0, Math.sin(th)], [Math.sin(th), 0, -Math.cos(th)]]; }
 function buildChunk(ci) {
   const a0 = ci * CH, a1 = a0 + CH;
   const road = newBuf(), side = newBuf(), bld = newBuf(), neon = newBuf(), pool = newBuf();
   const group = new THREE.Group();
+  const ctx = { side, bld, neon, pool, group, rotors: [] };
+  const profiles = { '-1': GROUND[MAP.ground](-1), '1': GROUND[MAP.ground](1) };
   for (let a = a0; a < a1; a++) {
     const p0 = pose(a), p1 = pose(a + 1);
     const v0 = a * SEG_M / 9, v1 = (a + 1) * SEG_M / 9;
     quad(road, lateral(p0, -RW), lateral(p0, RW), lateral(p1, RW), lateral(p1, -RW), [1, 1, 1], [[0, v0], [1, v0], [1, v1], [0, v1]], [0, 1, 0]);
-    const kc = Math.floor(a / RUMBLE) % 2 ? KERB_A : KERB_B;
+    // ligne de départ en damier
+    if (segAt(a).index === 0) {
+      for (let k = 0; k < 10; k++) {
+        const x0 = -RW + k * RW / 5, col = k % 2 ? [0.95, 0.95, 0.95] : [0.06, 0.06, 0.07];
+        quad(side, lateral(p0, x0, 0.02), lateral(p0, x0 + RW / 5, 0.02), lateral(p1, x0 + RW / 5, 0.02), lateral(p1, x0, 0.02), col, null, [0, 1, 0]);
+      }
+    }
     for (const s of [-1, 1]) {
-      const k0 = RW * s, k1 = (RW + 0.5) * s, w1 = (RW + 6) * s, g1 = (RW + 70) * s;
-      quad(side, lateral(p0, k0), lateral(p1, k0), lateral(p1, k0, 0.15), lateral(p0, k0, 0.15), kc, null, [-Math.cos(p0.th) * s, 0, -Math.sin(p0.th) * s]);
-      quad(side, lateral(p0, k0, 0.15), lateral(p1, k0, 0.15), lateral(p1, k1, 0.15), lateral(p0, k1, 0.15), kc, null, [0, 1, 0]);
-      quad(side, lateral(p0, k1, 0.15), lateral(p1, k1, 0.15), lateral(p1, w1, 0.15), lateral(p0, w1, 0.15), WALK, null, [0, 1, 0]);
-      quad(side, lateral(p0, w1, 0.15), lateral(p1, w1, 0.15), lateral(p1, g1, -0.3), lateral(p0, g1, -0.3), GROUND, null, [0, 1, 0]);
+      for (const st of profiles[s]) {
+        const col = typeof st.col === 'function' ? st.col(a, s) : st.col;
+        if (st.curb) quad(side, lateral(p0, st.a * s), lateral(p1, st.a * s), lateral(p1, st.a * s, st.ya), lateral(p0, st.a * s, st.ya), col, null, [-Math.cos(p0.th) * s, 0, -Math.sin(p0.th) * s]);
+        quad(side, lateral(p0, st.a * s, st.ya), lateral(p1, st.a * s, st.ya), lateral(p1, st.b * s, st.yb), lateral(p0, st.b * s, st.yb), col, null, [0, 1, 0]);
+      }
     }
     const deco = segAt(a).deco;
     if (!deco) continue;
-    for (const b of deco.bld) {
-      const pm = pose(a + Math.round(b.len / SEG_M / 2));
-      const [r, f] = axes(pm.th);
-      const o = lateral(pm, b.side * (RW + 6.5 + b.d / 2), -3);
-      const tint = TINTS[b.tint];
-      box(bld, o, r, f, b.d, b.h + 3, b.len, tint, {
-        uv: (face, span, hh) => {
-          if (face === 'top') return [[0.01, 0.01], [0.02, 0.01], [0.02, 0.02], [0.01, 0.02]];
-          const u1 = b.u0 + span / 51.2, v1 = b.v0 + hh / 54.4;
-          return [[b.u0, b.v0], [u1, b.v0], [u1, v1], [b.u0, v1]];
-        }
-      });
-      const facade = b.side * (RW + 6.45);
-      if (b.neon) {
-        const c = hex3(b.neon);
-        const fo = lateral(pm, facade); const along = (b.u0 - 0.5) * b.len * 0.6;
-        box(neon, [fo[0] + f[0] * along, fo[1], fo[2] + f[2] * along], r, f, 0.12, b.h * 0.5, 0.35, c, { y0: b.h * 0.3 });
-      }
-      if (b.sign) {
-        const c = hex3(b.neon || '#00E5FF');
-        box(neon, lateral(pm, facade), r, f, 0.12, 0.25, b.len * 0.7, c, { y0: 4.2 });
-        box(neon, lateral(pm, facade), r, f, 0.12, 0.25, b.len * 0.7, c, { y0: 5.6 });
-      }
-    }
-    if (deco.lamp) {
-      const s = deco.lamp, [r, f] = axes(p0.th);
-      box(side, lateral(p0, s * (RW + 0.8), 0.15), r, f, 0.18, 7.6, 0.18, POLE);
-      box(side, lateral(p0, s * (RW - 0.6), 7.5), r, f, 2.9, 0.14, 0.14, POLE);
-      box(neon, lateral(p0, s * (RW - 1.9), 7.36), r, f, 0.9, 0.12, 0.38, LAMP);
-      const c = lateral(p0, s * (RW - 2.4), 0.03), R2 = 8;
-      quad(pool, [c[0] - r[0] * R2 - f[0] * R2, c[1], c[2] - r[2] * R2 - f[2] * R2], [c[0] + r[0] * R2 - f[0] * R2, c[1], c[2] + r[2] * R2 - f[2] * R2],
-        [c[0] + r[0] * R2 + f[0] * R2, c[1], c[2] + r[2] * R2 + f[2] * R2], [c[0] - r[0] * R2 + f[0] * R2, c[1], c[2] - r[2] * R2 + f[2] * R2], POOL, [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 1, 0]);
-    }
-    if (deco.board) {
-      const s = deco.board.side, [r, f] = axes(p0.th), col = BOARD_TEXTS[deco.board.t][1];
-      box(side, lateral(p0, s * (RW + 1), 0.15), r, f, 0.3, 6.2, 0.3, POLE);
-      box(side, lateral(p0, s * (RW + 5), 0.15), r, f, 0.3, 6.2, 0.3, POLE);
-      box(side, lateral(p0, s * (RW + 2), 6), r, f, 8.6, 3.6, 0.3, hex3('#0b0c14'));
-      const nc = hex3(col);
-      box(neon, lateral(p0, s * (RW + 2), 9.6), r, f, 8.6, 0.14, 0.34, nc);
-      box(neon, lateral(p0, s * (RW + 2), 5.88), r, f, 8.6, 0.14, 0.34, nc);
-      const panel = new THREE.Mesh(boardGeo, MAT.boards[deco.board.t]);
-      const pc = lateral(p0, s * (RW + 2), 7.8);
-      panel.position.set(pc[0] - f[0] * 0.17, pc[1], pc[2] - f[2] * 0.17);
-      panel.rotation.y = -p0.th;
-      group.add(panel);
-      // reflet du néon sur la route mouillée
-      const rc = lateral(p0, s * (RW - 1.5), 0.04), L = 16, Wd = 2.6;
-      const cx = rc[0] - f[0] * L * 0.5, cz = rc[2] - f[2] * L * 0.5, k = 0.45;
-      quad(pool, [cx - r[0] * Wd - f[0] * L, rc[1], cz - r[2] * Wd - f[2] * L], [cx + r[0] * Wd - f[0] * L, rc[1], cz + r[2] * Wd - f[2] * L],
-        [cx + r[0] * Wd + f[0] * L, rc[1], cz + r[2] * Wd + f[2] * L], [cx - r[0] * Wd + f[0] * L, rc[1], cz - r[2] * Wd + f[2] * L], [nc[0] * k, nc[1] * k, nc[2] * k], [[0, 0], [1, 0], [1, 1], [0, 1]], [0, 1, 0]);
-    }
+    for (const it of deco.items) { const fn = DECOR[it.t]; if (fn) fn(ctx, it, p0, a); }
   }
   const add = (B, mat, uv) => { if (B.p.length) group.add(new THREE.Mesh(toGeo(B, uv), mat)); };
-  add(road, MAT.road, true); add(side, MAT.side, false); add(bld, MAT.bld, true); add(neon, MAT.neon, false); add(pool, MAT.pool, true);
+  add(road, MAT.road, true); add(side, MAT.side, false); add(bld, ENV.windowsLit ? MAT.bld : MAT.bldDay, true); add(neon, MAT.neon, false);
+  if (ENV.poolK > 0) add(pool, MAT.pool, true);
+  group.userData.rotors = ctx.rotors;
   scene.add(group);
   chunks.set(ci, group);
 }
 let boardGeo = null;
 function disposeChunk(ci) {
   const g = chunks.get(ci); if (!g) return;
-  g.children.forEach((m) => { if (m.geometry !== boardGeo) m.geometry.dispose(); });
+  g.children.forEach((m) => { if (m.geometry !== boardGeo && m.geometry !== adGeo) m.geometry.dispose(); });
   scene.remove(g); chunks.delete(ci);
 }
 function ensureChunks(sAbs, all) {

@@ -15,53 +15,26 @@ function addRoad(enter, hold, leave, curve, y) {
   for (let n = 0; n < hold; n++) addSegment(curve, easeInOut(startY, endY, (enter + n) / total));
   for (let n = 0; n < leave; n++) addSegment(easeInOut(curve, 0, n / leave), easeInOut(startY, endY, (enter + hold + n) / total));
 }
-const BOARD_TEXTS = [['WAFORSPEED', '#FF6A00'], ['GARAGE 88', '#00E5FF'], ['TURBO CAFÉ', '#FF6A00'], ['NUIT BLANCHE', '#00E5FF'], ['PNEUS 24/7', '#00E5FF']];
 function buildTrack() {
   segments = [];
-  const R = mulberry32(88);
+  const map = MAP, R = mulberry32(map.seed);
   addRoad(30, 60, 30, 0, 0);
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < map.sections; i++) {
     const t = R();
-    const hill = R() < 0.5 ? Math.round((R() - 0.5) * 70) : 0;
+    const hill = R() < 0.5 ? Math.round((R() - 0.5) * map.hills) : 0;
     if (t < 0.22) addRoad(25, 40 + R() * 40 | 0, 25, 0, hill);
     else if (t < 0.7) {
-      const dir = R() < 0.5 ? -1 : 1, c = [2, 3, 4, 5][Math.floor(R() * 4)];
+      const dir = R() < 0.5 ? -1 : 1, c = map.curves[Math.floor(R() * map.curves.length)];
       addRoad(30, 30 + R() * 50 | 0, 30, dir * c, hill);
     } else {
-      const c = 2 + R() * 2;
+      const c = map.curves[0] + R() * 2;
       addRoad(20, 25, 20, -c, hill / 2); addRoad(20, 25, 20, c, 0); addRoad(20, 25, 20, -c, -hill / 2);
     }
   }
   addRoad(50, 50, 80, 0, -lastY() / SEG);
   addRoad(20, 30, 20, 0, 0);
   trackLength = segments.length * SEG;
-  const len = segments.length;
-  const D = mulberry32(4242);
-  for (let n = 0; n < len; n++) segments[n].deco = { bld: [], lamp: 0, board: null };
-  // immeubles : un tous les 11 segments de chaque côté (décalés)
-  for (const side of [-1, 1]) {
-    for (let n = side < 0 ? 0 : 5; n < len - 11; n += 11) {
-      if (D() < 0.1) continue;
-      const tall = D();
-      segments[n].deco.bld.push({
-        side, len: 11 * SEG_M - 0.6 - D() * 2, d: 10 + D() * 14,
-        h: tall < 0.15 ? 55 + D() * 40 : tall < 0.6 ? 22 + D() * 30 : 10 + D() * 14,
-        tint: Math.floor(D() * 4), u0: Math.floor(D() * 16) / 16, v0: Math.floor(D() * 16) / 16,
-        neon: D() < 0.4 ? (D() < 0.5 ? '#00E5FF' : '#FF6A00') : null, sign: D() < 0.3
-      });
-    }
-  }
-  for (let n = 12; n < len; n += 24) {
-    const side = (n / 24 | 0) % 2 ? 1 : -1;
-    segments[n].deco.lamp = side;
-    segments[n].sprites.push({ offset: side * (RW + 0.8) / RW, collide: true, hit: 0.14 });
-  }
-  for (let n = 75; n < len - 40; n += 140 + Math.floor(D() * 60)) {
-    const side = D() < 0.5 ? -1 : 1;
-    if (segments[n].deco.lamp) { segments[n].deco.lamp = 0; segments[n].sprites = []; }
-    segments[n].deco.board = { side, t: Math.floor(D() * BOARD_TEXTS.length) };
-    segments[n].sprites.push({ offset: side * (RW + 1) / RW, collide: true, hit: 0.15 });
-  }
+  generateDecor(map);
 }
 const segAt = (a) => segments[((a % segments.length) + segments.length) % segments.length];
 const findSegment = (z) => segments[Math.floor(z / SEG) % segments.length];

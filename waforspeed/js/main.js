@@ -16,6 +16,7 @@ function frame(t) {
   requestAnimationFrame(frame);
 }
 function boot() {
+  ENV = envFor(MAP, TOD);
   buildTrack();
   if (THREE) {
     try {

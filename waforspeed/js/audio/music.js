@@ -87,6 +87,9 @@ const Music = (() => {
     return [r, r + (q === 'm' ? 3 : 4), r + 7];
   }
   function tick(time) {
+    try { tickInner(time); } catch (e) { step++; }
+  }
+  function tickInner(time) {
     if (!N || !curTrack) return;
     const tr = curTrack, bar = Math.floor(step / 16), s = step % 16, L = layersFor(tr, bar);
     const has = (k) => (' ' + L + ' ').includes(' ' + k + ' ');

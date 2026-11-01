@@ -49,7 +49,8 @@ function renderOpenRooms() {
   }
   box2.hidden = open.length === 0;
 }
-async function joinRoom(code) {
+let iAmHost = false;
+async function joinRoom(code, host = false) {
   if (!room) return;
   setNick();
   code = String(code || '').toLowerCase();
@@ -58,15 +59,26 @@ async function joinRoom(code) {
   try { sub = await room.join('wfs-' + code); } catch (e) {
     sub = null; lobbyNote('Impossible de rejoindre ce salon pour le moment. Réessaie dans quelques secondes.', true); return;
   }
-  roomCode = code; round = 0; myStatus = 'lobby'; ghosts.clear();
-  sub.presence({ n: nick, st: 'lobby', r: 0, d: 0, x: 0, v: 0, ft: null, car: myCar.id, paint: myPaint().id }).catch(() => {});
+  roomCode = code; round = 0; myStatus = 'lobby'; ghosts.clear(); iAmHost = host;
+  sub.presence({ n: nick, st: 'lobby', r: 0, d: 0, x: 0, v: 0, ft: null, car: myCar.id, paint: myPaint().id, host: host || null, map: host ? MAP.id : null, tod: host ? TOD : null }).catch(() => {});
   sub.onPeers(onRoomPeers, () => { lobbyNote('La connexion au salon a été perdue.', true); leaveRoom(); renderLobby(); });
   renderLobby(); renderOpenRooms(); advertise();
 }
 function createRoom() {
   let code = '';
   for (let i = 0; i < 4; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  joinRoom(code);
+  joinRoom(code, true);
+}
+/* le terrain d'un duel est choisi par le créateur du salon */
+function hostPeer() { return others().find((p) => pres(p, 'host') === true); }
+function followHostMap() {
+  if (!sub || iAmHost) return;
+  const h = hostPeer(); if (!h) return;
+  const id = pres(h, 'map'), tod = pres(h, 'tod');
+  if (typeof id !== 'string' || !MAPS.some((m) => m.id === id)) return;
+  if ((id !== MAP.id || tod !== TOD) && (state === 'menu' || state === 'over')) {
+    if (setMap(id, tod)) { const wasOver = state === 'over'; resetRace('menu', 7); if (wasOver) state = 'over'; }
+  }
 }
 function leaveRoom() {
   if (sub) { try { sub.leave(); } catch (e) {} }
@@ -82,6 +94,7 @@ function onRoomPeers(change) {
     const mx = Math.max(round, ...others().filter((p) => pres(p, 'st') === 'ready').map((p) => num(pres(p, 'r'))));
     if (mx > round) { round = mx; sub.presence({ r: round }).catch(() => {}); }
   }
+  followHostMap();
   checkStart();
   if (!screens.lobby.hidden) renderLobby();
   if (!screens.duelOver.hidden) renderDuelResult();
@@ -100,6 +113,7 @@ function checkStart() {
 function startDuelRace() {
   round += 1; myStatus = 'race'; mode = 'duel';
   audioInit();
+  followHostMap();
   resetRace('play', hashStr(roomCode) + Math.imul(round, 977));
   for (const k in input) input[k] = false;
   state = 'count'; myFinish = 0; presenceTimer = 0; raceStartWall = performance.now();
@@ -173,6 +187,10 @@ function renderLobby() {
   const can = roomState === 'ok';
   $('#createBtn').disabled = !can; $('#joinBtn').disabled = !can;
   $('#lobbyCar').textContent = myCar.name;
+  $('#lobbyMap').textContent = MAP.name + ' · ' + (TOD === 'jour' ? 'Jour' : 'Nuit');
+  $('#lobbyMapBtn').hidden = !!sub && !iAmHost;
+  const hp = sub && !iAmHost ? hostPeer() : null;
+  $('#lobbyMapNote').textContent = sub && !iAmHost ? (hp ? 'choisi par ' + peerName(hp) : '') : '';
   if (!inRoom) {
     if (roomState === 'pending') lobbyNote('Connexion au serveur de jeu…');
     else if (!can) lobbyNote('Le duel marche quand la page est ouverte sur claude.ai par des personnes connectées qui ont accès au lien. Ici, seule la course solo est disponible.', true);
@@ -225,6 +243,7 @@ $('#codeIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoo
 $('#nick').addEventListener('change', () => { setNick(); advertise(); });
 $('#lobbyBack').addEventListener('click', toMenu);
 $('#lobbyGarage').addEventListener('click', () => openGarage('duel'));
+$('#lobbyMapBtn').addEventListener('click', () => openMapSel('duel'));
 $('#readyBtn').addEventListener('click', () => setReady(myStatus !== 'ready'));
 $('#leaveBtn').addEventListener('click', () => { leaveRoom(); renderLobby(); });
 $('#rematchBtn').addEventListener('click', () => {

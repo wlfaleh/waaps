@@ -12,7 +12,7 @@ function setGantry(label, col, sAbs) {
   const p = trackPoint(sAbs, 0, {});
   const B = newBuf(), N = newBuf(), [r, f] = axes(p.th), o = [p.x, p.y, p.z];
   const lat = (m) => [o[0] + r[0] * m, o[1], o[2] + r[2] * m];
-  box(B, lat(-(RW + 1)), r, f, 0.6, 9, 0.6, POLE); box(B, lat(RW + 1), r, f, 0.6, 9, 0.6, POLE);
+  box(B, lat(-(RW + 1)), r, f, 0.6, 9, 0.6, C.pole); box(B, lat(RW + 1), r, f, 0.6, 9, 0.6, C.pole);
   box(B, o, r, f, (RW + 1.6) * 2, 2.4, 0.7, hex3('#0b0c14'), { y0: 9 });
   const c = hex3(col);
   box(N, o, r, f, (RW + 1.6) * 2, 0.16, 0.8, c, { y0: 11.4 }); box(N, o, r, f, (RW + 1.6) * 2, 0.16, 0.8, c, { y0: 8.86 });
@@ -89,6 +89,14 @@ function updateCamera(dt, sP) {
   camera.fov = fovNow; camera.updateProjectionMatrix();
   sky.position.copy(camera.position);
   skyline.position.set(camera.position.x, camera.position.y + 18, camera.position.z);
+  // soleil / lune / étoiles / nuages restent « à l'infini » ; la mer suit la caméra au niveau de la plage
+  const sd = ENV.sunDir;
+  sunDisc.position.set(camera.position.x + sd[0] * 900, camera.position.y + sd[1] * 900, camera.position.z + sd[2] * 900);
+  moonDisc.position.copy(sunDisc.position);
+  stars.position.copy(camera.position); clouds.position.set(camera.position.x, camera.position.y, camera.position.z);
+  sunLight.position.set(camera.position.x + sd[0] * 100, camera.position.y + sd[1] * 100, camera.position.z + sd[2] * 100);
+  sunLight.target.position.copy(camera.position);
+  water.position.set(camera.position.x, -1.6, camera.position.z);
 }
 
 function render3D(dt, t) {
@@ -154,11 +162,19 @@ function render3D(dt, t) {
   let li = 0;
   for (let a = aP - 4; a < aP + 160 && li < lampLights.length; a++) {
     const d = segAt(a).deco;
-    if (d && d.lamp) { const p = pose(a); const q = lateral(p, d.lamp * (RW - 1.9), 7.1); lampLights[li++].position.set(q[0], q[1], q[2]); }
+    if (d && d.lamp && ENV.lamps) {
+      const p = pose(a), st = d.lampStyle, l = lampLights[li++];
+      const q = st === 'flood' ? lateral(p, d.lamp * (RW + 4), 16) : st === 'beach' ? lateral(p, d.lamp * (RW + 0.6), 5.6) : lateral(p, d.lamp * (RW - 1.9), 7.1);
+      l.position.set(q[0], q[1], q[2]);
+      l.color.set(st === 'flood' ? 0xeaf2ff : 0xffb46b); l.distance = st === 'flood' ? 60 : 26; l.intensity = st === 'flood' ? 1.8 : 1.1;
+    }
   }
   updateParticles(dt);
   updateCamera(dt, sP);
-  if (composer) { renderPass.scene = scene; renderPass.camera = camera; bloom.threshold = 0.46; bloom.strength = 0.8; composer.render(dt); }
+  // pales des éoliennes
+  for (const g of chunks.values()) for (const r of g.userData.rotors || []) r.rotation.z += r.userData.spin * dt;
+  if (headlight) headlight.intensity = ENV.headlight;
+  if (composer) { renderPass.scene = scene; renderPass.camera = camera; bloom.strength = ENV.bloom[0]; bloom.threshold = ENV.bloom[1]; composer.render(dt); }
   else renderer.render(scene, camera);
   drawFx(dt);
 }
