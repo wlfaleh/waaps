@@ -74,6 +74,12 @@ function toMenu() {
 
 /* ---------- Garage ---------- */
 let garageFor = 'solo';
+function renderLoadProgress() {
+  const p = modelProgress.get(myCar.id), el = $('#carLoading');
+  if (!el || el.hidden) return;
+  const txt = p === undefined ? '' : p >= 0 ? ' ' + Math.round(p * 100) + ' %' : ' ' + (-p / 1e6).toFixed(1) + ' Mo';
+  el.lastChild.textContent = 'Chargement du modèle 3D…' + txt;
+}
 function renderGarageUI() {
   const i = CARS.indexOf(myCar), st = carStats(myCar), sp = myCar.spec;
   $('#carBrand').textContent = myCar.brand;
@@ -87,6 +93,7 @@ function renderGarageUI() {
   const st2 = modelStatus.get(myCar.id);
   $('#carModelNote').textContent = st2 === 'ok' ? modelNote(myCar) : '';
   $('#carLoading').hidden = st2 === 'ok' || st2 === 'error' || !CAR_MODELS[myCar.id];
+  renderLoadProgress();
   const labels = [['v', 'Vitesse'], ['a', 'Accélération'], ['m', 'Maniabilité'], ['p', 'Puissance']];
   const box2 = $('#carStats');
   if (!box2.children.length) {
@@ -451,13 +458,19 @@ function setQuality(q, byUser) {
   if (renderer) { setupComposer(); setupReflections(); onResize(); applyEnv(); clearChunks(); ensureChunks(dist, true); clearTrafficMeshes(); }
 }
 let perfT = 0, perfN = 0, perfDone = qualityChosen;
+/* fluidité automatique : toutes les 2 s de course, on ajuste la résolution (60 à 100 %) selon les images/s ;
+   si même à 60 % le jeu reste sous 30 images/s, on passe en graphismes rapides (une fois) */
+let dynT = 0, dynN = 0;
 function watchPerf(raw) {
-  if (perfDone || state !== 'play' || quality !== 'high') return;
-  perfT += raw; perfN++;
-  if (perfT >= 5) {
-    perfDone = true;
-    if (perfN / perfT < 30) { setQuality('low', false); toast('Graphismes rapides', 'pour plus de fluidité', 'cp'); }
-  }
+  if (state !== 'play') { dynT = 0; dynN = 0; return; }
+  dynT += raw; dynN++;
+  if (dynT < 2) return;
+  const fps = dynN / dynT; dynT = 0; dynN = 0;
+  const prev = resScale;
+  if (fps < 40 && resScale > 0.6) resScale = Math.max(0.6, +(resScale - 0.1).toFixed(2));
+  else if (fps > 57 && resScale < 1) resScale = Math.min(1, +(resScale + 0.1).toFixed(2));
+  if (resScale !== prev) onResize();
+  if (!perfDone && quality === 'high' && resScale <= 0.6 && fps < 30) { perfDone = true; setQuality('low', false); toast('Graphismes rapides', 'pour plus de fluidité', 'cp'); }
 }
 
 /* ---------- Clavier & tactile ---------- */

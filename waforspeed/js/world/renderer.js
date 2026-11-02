@@ -663,9 +663,11 @@ function setupComposer() {
     composer.setSize(W, H);
   } catch (e) { composer = null; gradePass = null; }
 }
+/* résolution dynamique : baisse un peu la définition si l'appareil peine, la remonte s'il a de la marge */
+let resScale = 1;
 function onResize() {
   W = innerWidth; H = innerHeight;
-  DPR = Math.min(window.devicePixelRatio || 1, quality === 'high' ? (isTouch ? 1.5 : 1.75) : 1.25);   // mobile : 1.5 max (coût x2 au-delà)
+  DPR = Math.min(window.devicePixelRatio || 1, quality === 'high' ? (isTouch ? 1.5 : 1.75) : 1.25) * resScale;   // mobile : 1.5 max ; resScale : résolution dynamique
   if (renderer) {
     renderer.setPixelRatio(DPR);
     renderer.setSize(W, H, false);

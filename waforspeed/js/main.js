@@ -4,7 +4,8 @@
 /* ================= Boucle ================= */
 let lastT = 0, dtSmooth = 0;
 function frame(t) {
-  const raw0 = Math.min(0.05, Math.max(0, (t - lastT) / 1000));
+  const real = Math.max(0, (t - lastT) / 1000);   // vrai temps écoulé (mesure de fluidité)
+  const raw0 = Math.min(0.05, real);
   // pas de temps lissé : les petites irrégularités du navigateur ne font plus « sauter » la voiture
   dtSmooth = dtSmooth ? dtSmooth + (raw0 - dtSmooth) * 0.25 : raw0;
   const raw = Math.abs(raw0 - dtSmooth) > 0.02 ? raw0 : dtSmooth;
@@ -13,7 +14,7 @@ function frame(t) {
   const dt = raw * timeScale;
   lastT = t;
   update(dt);
-  watchPerf(raw);
+  watchPerf(Math.min(real, 1));
   if (renderer) render3D(dt, t);
   if (state === 'play' || state === 'pause' || state === 'over' || state === 'count') updateHud();
   engineUpdate();

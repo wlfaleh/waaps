@@ -117,7 +117,7 @@ function pedDress(c, L) {
 function pedLoad() {
   if (PED.status !== 'none' || !THREE.GLTFLoader || !THREE.SkeletonUtils) { if (PED.status === 'none') PED.status = 'error'; return; }
   PED.status = 'loading';
-  const loader = new THREE.GLTFLoader();
+  const loader = newGLTFLoader();
   const get = (url) => new Promise((ok, ko) => loader.load(url, ok, undefined, ko));
   Promise.all([get(PED_FILES.homme), get(PED_FILES.femme), get(PED_FILES.anims)]).then(([h, f, a]) => {
     for (const clip of a.animations) PED.clips[clip.name] = clip;
