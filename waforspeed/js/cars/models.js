@@ -373,9 +373,10 @@ function makeCarMesh(car, paintHex, opts = {}) {
   // conducteur (vrai personnage figé assis) : joueur, trafic et adversaire
   if (typeof addDriver === 'function' && !opts.noDriver) addDriver(inner, car, opts.tailMat ? 12345 : (Math.random() * 1e9) | 0);
   const sh = new THREE.Mesh(shadowGeo, MAT.shadow);
-  sh.scale.set(Wd * 1.5, 1, L * 1.25); sh.position.y = 0.02; g.add(sh);
+  // ombre de contact douce, à la forme de la voiture (s'ajoute à l'ombre du soleil le jour)
+  sh.scale.set(Wd * 1.3, 1, L * 1.12); sh.position.y = 0.02; g.add(sh);
   const tg = new THREE.Mesh(glowGeo, MAT.tailGlow);
-  tg.scale.set(Wd * 1.6, 1, 2.6); tg.position.set(0, 0.03, L / 2 + 0.9); g.add(tg);
+  tg.scale.set(Wd * 1.2, 1, 1.8); tg.position.set(0, 0.03, L / 2 + 0.6); g.add(tg);
   if (opts.glow) {
     const ug = new THREE.Mesh(glowGeo, new THREE.MeshBasicMaterial({ map: TEXS.radial, color: new THREE.Color(opts.glow), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
     ug.scale.set(Wd * 2.2, 1, L * 1.35); ug.position.y = 0.04; g.add(ug);
@@ -419,7 +420,7 @@ function makeCarMesh(car, paintHex, opts = {}) {
     for (const t of lamps.tail) { t.visible = night || brake; t.material = brake ? MAT.haloBrake : MAT.haloTail; t.scale.setScalar(brake ? 0.9 : 0.55); }
     for (const r of lamps.rev) r.visible = !!rev;
     for (const h of lamps.head) h.visible = !!night;
-    tg.visible = night || brake || rev; tg.material = rev ? MAT.revGlow : MAT.tailGlow;
+    tg.visible = night || brake || rev; tg.material = rev ? MAT.revGlow : brake ? MAT.tailGlowBrake : MAT.tailGlow;   // reflet discret des feux sur la route
     if (body.setBrake) body.setBrake(brake || night, rev);
   };
   const wheels = body.wheels || [], rw = body.rw || car.d.rw;

@@ -311,7 +311,8 @@ function setupThree() {
   MAT.pool = new THREE.MeshBasicMaterial({ map: TEXS.radial, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
   MAT.boards = TEXS.boards.map((t) => new THREE.MeshBasicMaterial({ map: t }));
   MAT.shadow = new THREE.MeshBasicMaterial({ map: TEXS.radial, color: 0x000000, transparent: true, opacity: 0.75, depthWrite: false });
-  MAT.tailGlow = new THREE.MeshBasicMaterial({ map: TEXS.radial, color: 0xff2040, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
+  MAT.tailGlow = new THREE.MeshBasicMaterial({ map: TEXS.radial, color: 0xff2040, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false });
+  MAT.tailGlowBrake = new THREE.MeshBasicMaterial({ map: TEXS.radial, color: 0xff2040, transparent: true, opacity: 0.38, blending: THREE.AdditiveBlending, depthWrite: false });
   makeCarMaterials();
 
   hemi = new THREE.HemisphereLight(0x46327a, 0x08080e, 0.75); scene.add(hemi);
@@ -447,7 +448,7 @@ function applyEnv() {
     s.camera.updateProjectionMatrix();
     s.bias = -0.0003; s.normalBias = 0.035; s.radius = 3;
   }
-  MAT.shadow.opacity = shadows ? 0.35 : 0.75;
+  MAT.shadow.opacity = shadows ? 0.55 : TOD === 'nuit' ? 0.7 : 0.62;   // ombre de contact naturelle sous les voitures
   sunDisc.visible = E.sunDisc; moonDisc.visible = E.moon; stars.visible = E.stars; clouds.visible = false;   // nuages dessinés dans le ciel
   water.visible = MAP.ground === 'beach'; water.material.color.set(E.water);
   water.material.envMap = envTex; water.material.envMapIntensity = 1; water.material.needsUpdate = true;
