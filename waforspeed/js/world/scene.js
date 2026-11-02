@@ -280,6 +280,7 @@ function render3D(dt, t) {
     }
   }
   if (typeof updatePeople === 'function') updatePeople(dt, sP);
+  if (typeof DRV !== 'undefined' && DRV.status === 'none') setupDrivers();   // conducteurs dès que les personnages sont chargés
   updateParticles(dt);
   updateCamera(dt, sP);
   lastDt = Math.max(dt, 1e-3);
