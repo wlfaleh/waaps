@@ -20,7 +20,10 @@
 <canvas id="fx" aria-hidden="true"></canvas>
 
 <div class="hud" id="hud" hidden>
+  <div class="hud-btns">
+  <button class="cam-btn" id="menuBtnHud" aria-label="Réglages et quitter (touche Échap)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg><span>Menu</span></button>
   <button class="cam-btn" id="camBtn" aria-label="Changer de caméra (touche C)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.6-2h6.8L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm8 3.2a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6z"/></svg><span>Proche</span></button>
+  </div>
   <div class="hud-top">
     <div class="hud-col">
     <div class="panel p-time">
@@ -142,11 +145,20 @@
 
 <section class="screen" id="pause" hidden aria-labelledby="pauseTitle">
   <div class="screen-inner">
-    <p class="eyebrow">Course en pause</p>
-    <h2 class="big" id="pauseTitle">Pause</h2>
+    <p class="eyebrow" id="pauseEyebrow">Course en pause</p>
+    <h2 class="big" id="pauseTitle">Réglages</h2>
+    <div class="settings">
+      <div class="set-row"><span class="label">Caméra</span><div class="seg" id="setCam" role="group" aria-label="Caméra">
+        <button data-v="0">Proche</button><button data-v="1">Loin</button><button data-v="2">Cockpit</button></div></div>
+      <div class="set-row"><span class="label">Graphismes</span><div class="seg" id="setGfx" role="group" aria-label="Graphismes">
+        <button data-v="high">Haute</button><button data-v="low">Rapide</button></div></div>
+      <div class="set-row"><span class="label">Son</span><div class="seg" id="setSnd" role="group" aria-label="Son">
+        <button data-v="on">Activé</button><button data-v="off">Coupé</button></div></div>
+    </div>
     <div class="actions">
       <button class="btn" id="resumeBtn">Reprendre</button>
-      <button class="btn btn--ghost" id="quitBtn">Abandonner</button>
+      <button class="btn btn--ghost" id="restartBtn">Recommencer</button>
+      <button class="btn btn--ghost" id="quitBtn">Quitter la course</button>
     </div>
   </div>
 </section>
