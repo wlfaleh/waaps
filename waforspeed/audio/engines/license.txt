@@ -1,0 +1,14 @@
+Sons de moteur de WaForSpeed — vrais enregistrements, mis en boucle (fondu enchaîné), niveau égalisé, 22 kHz mono.
+
+v8.wav        « engine working internal (v8) » par nhaudio — https://freesound.org/people/nhaudio/sounds/275402/ — CC BY
+              (via le pack libre CC-Sounds de CDDA-Soundpacks, github.com/Fris0uman/CDDA-Soundpacks)
+thermique.wav « engine working internal (combustion) » par nhaudio — https://freesound.org/people/nhaudio/sounds/275402/ — CC BY
+              (même source)
+sport.wav     « Car engine loop (96 kHz, 4 s) » par Ivan "qubodup" Gabovitch — https://opengameart.org/content/car-engine-loop-96khz-4s — CC BY-SA 3.0
+              (via SuperTuxKart, sfx/engine_small.ogg) ; version modifiée partagée sous la même licence
+citadine.wav  « engine_idle.wav » par mhad — https://freesound.org/s/390788/ — CC0
+gros.wav      « engine_large » : mixage de « Transfer Truck Idle and Drive » (Mike Koenig), « Compressor Motor » (Stephan),
+              « Car Accelerating » (SpeedJunkie), par Marianne Gagnon — CC BY-SA 3.0 (via SuperTuxKart, sfx/engine_large.ogg) ;
+              version modifiée partagée sous la même licence
+
+Voiture électrique (Tesla) : pas de moteur thermique ; sifflement d'onduleur généré par le jeu.
