@@ -175,7 +175,7 @@ function realBody(car, paintHex, opts) {
     });
     o.material = arr ? mats : mats[0];
   });
-  const { wheels, rw } = rigWheels(obj, car);
+  const { wheels, rw } = rigWheels(obj, car, !opts.traffic);
   return {
     object: obj, wheels, rw, lampY: R.lampY, headY: R.headY,
     setBrake: (on) => { for (const t of tails) if (t.emissive) { t.emissive.set(0xff2040); t.emissiveIntensity = on ? 2.5 : 0.4; } }
@@ -270,7 +270,7 @@ const WHEEL_RX = /(wheel|roue|tire|tyre|pneu|(^|[^a-z])rim([^a-z]|$))/i;   // «
 /* Roues d'un vrai modèle : on repère les morceaux de roue (nom contenant wheel, roue, tire, rim…),
    on les regroupe par coin de la voiture, puis chaque roue est accrochée à un pivot (braquage)
    et à un axe (rotation). Les étriers et le reste ne bougent pas. */
-function rigWheels(obj, car) {
+function rigWheels(obj, car, withBlur) {
   const spec = CAR_MODELS[car.id] || {};
   const rx = spec.wheel ? new RegExp(spec.wheel, 'i') : WHEEL_RX;
   obj.updateMatrixWorld(true);
@@ -298,7 +298,16 @@ function rigWheels(obj, car) {
     const spinG = new THREE.Group(); steerG.add(spinG);
     obj.add(steerG); obj.updateMatrixWorld(true);
     for (const m of meshes) spinG.attach(m);
-    wheels.push({ steer: steerG, spin: spinG, front: key[1] === 'F' });
+    // disque de flou de vitesse sur la face extérieure : à haute vitesse les rayons deviennent flous
+    // (comme sur une vraie photo) au lieu de « stroboscoper »
+    let blur = null;
+    if (withBlur && TEXS.wheelBlur) {
+      blur = new THREE.Mesh(blurGeo, new THREE.MeshBasicMaterial({ map: TEXS.wheelBlur, transparent: true, opacity: 0, depthWrite: false, color: 0x8a8d94 }));
+      const side = c.x > 0 ? 1 : -1;
+      blur.scale.setScalar(sz.y * 0.43); blur.position.x = side * (sz.x / 2 + 0.006); blur.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+      steerG.add(blur);
+    }
+    wheels.push({ steer: steerG, spin: spinG, front: key[1] === 'F', blur });
   }
   return { wheels, rw };
 }
@@ -373,8 +382,15 @@ function makeCarMesh(car, paintHex, opts = {}) {
     /* braquage des roues avant (radians, + = à droite) et distance parcourue (mètres) */
     animWheels: (steerAngle, meters) => {
       const blurK = clamp((Math.abs(meters) / Math.max(1e-3, lastDt) - 6) / 14, 0, 0.92);
+      // la caisse bouge (roulis, tangage, suspension) mais les roues restent posées sur la route
+      const rz = inner.rotation.z, rx = inner.rotation.x, ly = inner.position.y;
       for (const w of wheels) {
-        if (w.front) w.steer.rotation.y = -steerAngle;
+        if (!w.base) w.base = w.steer.position.clone();
+        const x = w.base.x, z = w.base.z;
+        w.steer.position.y = w.base.y + clamp(-(ly + x * rz - z * rx), -0.07, 0.07);
+        w.steer.rotation.z = -rz;
+        // épure d'Ackermann : la roue intérieure au virage braque plus que l'extérieure
+        if (w.front) { const inside = (steerAngle > 0) === (x > 0); w.steer.rotation.y = -steerAngle * (inside ? 1.12 : 0.9); }
         w.spin.rotation.x -= meters / rw;
         if (w.blur) { w.blur.material.opacity = blurK; w.blur.rotation.z += meters / rw * 0.05; }
       }

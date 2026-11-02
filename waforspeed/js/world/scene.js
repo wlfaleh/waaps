@@ -273,6 +273,7 @@ function render3D(dt, t) {
       l.color.set(st === 'flood' ? 0xeaf2ff : 0xffb46b); l.distance = st === 'flood' ? 60 : 26; l.intensity = st === 'flood' ? 1.8 : 1.1;
     }
   }
+  if (typeof updatePeople === 'function') updatePeople(dt, sP);
   updateParticles(dt);
   updateCamera(dt, sP);
   lastDt = Math.max(dt, 1e-3);
