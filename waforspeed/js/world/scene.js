@@ -223,6 +223,7 @@ function render3D(dt, t) {
   }
   // feux : arrière allumés la nuit, stop au freinage, feux de recul blancs en marche arrière
   playerMesh.userData.setLights(TOD === 'nuit', braking, reversing || speed < -1);
+  updateBeam(TOD === 'nuit', sP, playerX * RW, playerYaw + spinYaw);
   for (const fl of flames) { fl.visible = nitroOn; if (nitroOn) { const k = 0.7 + Math.random() * 0.6; fl.scale.set(1, 1, k); } }
   // trafic (feux de la silhouette lointaine allumés la nuit)
   farLampU.value = TOD === 'nuit' ? 2.2 : 0;
