@@ -5,7 +5,8 @@
 
 const realModels = new Map();
 const envMats = new Set();   // matériaux des vrais modèles qui affichent les reflets   // id -> { root, repaint, tris }
-const modelStatus = new Map();  // id -> 'none' | 'loading' | 'ok' | 'error'
+const modelStatus = new Map();
+const modelProgress = new Map();   // id -> 0..1 (ou -octets si la taille totale est inconnue)
 const MODEL_RX = {
   paint: /(car_?paint|paint|body|carros|kaross|exterior|lack)/i,
   notPaint: /(glass|window|vitre|tire|tyre|pneu|rim|jante|wheel|chrome|light|lamp|feu|interior|seat|plate|grill|black|trim|rubber|mirror_glass)/i,
@@ -24,7 +25,33 @@ function getLoader(file) {
     if (!colladaReady) colladaReady = THREE.ColladaLoader ? Promise.resolve() : COLLADA_URLS.reduce((p, u) => p.then(() => loadScript(u)), Promise.resolve());
     return colladaReady.then(() => new THREE.ColladaLoader());
   }
-  return Promise.resolve(THREE.GLTFLoader ? new THREE.GLTFLoader() : null);
+  return Promise.resolve(THREE.GLTFLoader ? newGLTFLoader() : null);
+}
+/* Modèles compressés (EXT_meshopt_compression + quantification) : 3 fois plus légers à télécharger.
+   three r128 ne « dénormalise » pas les attributs entiers dans getX/fromBufferAttribute : on les
+   convertit en flottants juste après le chargement, pour que tout le code (échelle, roues, LOD) reste juste. */
+function newGLTFLoader() {
+  const l = new THREE.GLTFLoader();
+  if (window.MeshoptDecoder && l.setMeshoptDecoder) l.setMeshoptDecoder(window.MeshoptDecoder);
+  return l;
+}
+const DEQ = { position: 1, normal: 1, uv: 1, uv2: 1, tangent: 1, color: 1, _paint: 1, _lamp: 1 };
+function floatAttributes(root) {
+  root.traverse((o) => {
+    const g = o.geometry; if (!g || !g.attributes) return;
+    for (const name in g.attributes) {
+      const a = g.attributes[name];
+      if (!DEQ[name] && !name.startsWith('_')) continue;
+      const arr = a.isInterleavedBufferAttribute ? a.data.array : a.array;
+      if (arr instanceof Float32Array && !a.normalized) continue;
+      const n = a.count, k = a.itemSize, out = new Float32Array(n * k);
+      const div = !a.normalized ? 1 : arr instanceof Int8Array ? 127 : arr instanceof Uint8Array ? 255 : arr instanceof Int16Array ? 32767 : arr instanceof Uint16Array ? 65535 : 1;
+      const get = [a.getX, a.getY, a.getZ, a.getW];
+      for (let i = 0; i < n; i++) for (let c = 0; c < k; c++) { const v = get[c].call(a, i) / div; out[i * k + c] = a.normalized ? Math.max(v, -1) : v; }
+      g.setAttribute(name, new THREE.BufferAttribute(out, k));
+    }
+    if (g.morphAttributes) for (const name in g.morphAttributes) g.morphAttributes[name] = g.morphAttributes[name];
+  });
 }
 /* Chargement progressif : une voiture à la fois, la voiture du joueur d'abord,
    puis les versions « trafic » légères (LOD, ~1 Mo chacune) de toutes les voitures, même sur mobile.
@@ -82,7 +109,11 @@ function nextModel() {
         onModelReady(car);
       } catch (e) { fail(e); return; }
       done();
-    }, undefined, fail);
+    }, (ev) => {
+      // progression du téléchargement (affichée au showroom)
+      modelProgress.set(car.id, ev.total ? ev.loaded / ev.total : -ev.loaded);
+      if (state === 'garage' && car === myCar && typeof renderLoadProgress === 'function') renderLoadProgress();
+    }, fail);
   }).catch(fail);
 }
 
@@ -92,7 +123,7 @@ function loadLod(car) {
   lodStatus.set(car.id, 'loading');
   const done = (ok) => { lodStatus.set(car.id, ok ? 'ok' : 'error'); modelBusy = false; if (ok) onLodReady(car); nextModel(); };
   if (!THREE.GLTFLoader) { done(false); return; }
-  new THREE.GLTFLoader().load(lodPathOf(spec.file), (res) => {
+  newGLTFLoader().load(lodPathOf(spec.file), (res) => {
     try { lodModels.set(car.id, prepareLod(res.scene, car)); } catch (e) { console.info('LOD trafic illisible pour ' + car.name, e); done(false); return; }
     done(true);
   }, undefined, () => done(false));   // pas de LOD : repli (vrai modèle complet ou voiture procédurale)
@@ -102,6 +133,7 @@ function loadLod(car) {
    La silhouette lointaine « wfs_far » est mise de côté (1 seul maillage, couleurs par sommet). */
 const LOD_SPEC = { rotateY: 0, paint: '^wfs_paint$', tail: '^wfs_tail', wheel: '^wfs_wheel' };
 function prepareLod(scene, car) {
+  floatAttributes(scene);
   const far = scene.getObjectByName('wfs_far');
   if (far) far.parent.remove(far);
   const R = prepareModel(scene, car, LOD_SPEC);
@@ -135,6 +167,7 @@ function preciseBox(obj) {
 /* Met le modèle à l'échelle (longueur réelle de la voiture), le pose au sol,
    l'oriente avant vers -Z et repère les matériaux de carrosserie et de feux. */
 function prepareModel(root, car, spec) {
+  floatAttributes(root);
   const wrap = new THREE.Group();
   wrap.add(root);
   // nettoyage : pièces animées par squelette (mal placées hors animation) et plans d'ombre plats sous la voiture
