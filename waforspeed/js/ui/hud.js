@@ -2,7 +2,7 @@
 'use strict';
 
 /* ================= HUD ================= */
-const hud = { tl: $('#timeLabel'), cpl: $('#cpLabel'), sl: $('#scoreLabel'), board: $('#duelBoard'), time: $('#time'), score: $('#score'), combo: $('#combo'), cpn: $('#cpn'), cpbar: $('#cpbar'), kmh: $('#kmh'), unit: $('.speedo-read .unit'), nitroPanel: $('#nitroPanel'), speedoBox: $('#speedoBox') };
+const hud = { tl: $('#timeLabel'), cpl: $('#cpLabel'), sl: $('#scoreLabel'), board: $('#duelBoard'), time: $('#time'), score: $('#score'), combo: $('#combo'), cpn: $('#cpn'), cpbar: $('#cpbar'), kmh: $('#kmh'), unit: $('.speedo-read .unit'), nitroPanel: $('#nitroPanel'), speedoBox: $('#speedoBox'), nitroTouch: $('#nitroTouch') };
 const nitroCells = [...document.querySelectorAll('#nitroBar i')];
 const sctx = $('#speedo').getContext('2d');
 const last = {};
@@ -62,7 +62,10 @@ function updateHud() {
   setText('unit', hud.unit, speed < -1 ? 'R · KM/H' : 'KM/H');
   const cells = Math.round(nitro * 10);
   if (last.cells !== cells) { last.cells = cells; nitroCells.forEach((el, i) => el.classList.toggle('on', i < cells)); }
-  if (last.nitroOn !== nitroOn) { last.nitroOn = nitroOn; hud.nitroPanel.classList.toggle('active', nitroOn); }
+  if (last.nitroOn !== nitroOn) { last.nitroOn = nitroOn; hud.nitroPanel.classList.toggle('active', nitroOn); hud.nitroTouch.classList.toggle('active', nitroOn); }
+  // jauge circulaire du bouton Nitro tactile (pas de 2,5 %)
+  const nq = Math.round(nitro * 40);
+  if (last.nq !== nq) { last.nq = nq; hud.nitroTouch.style.setProperty('--n', (nq / 40).toFixed(3)); hud.nitroTouch.classList.toggle('empty', nq < 2); }
   const red = k > 300;
   if (last.red !== red) { last.red = red; hud.speedoBox.classList.toggle('red', red); }
   if (last.k !== k) { last.k = k; drawSpeedo(k); }

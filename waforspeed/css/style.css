@@ -128,28 +128,132 @@ kbd {
 .seg button:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 
 /* ---------- Commandes tactiles ---------- */
+/* Verre dépoli, coins biseautés, pédales « métal + caoutchouc ». Zones de touche ≥ 56 px. */
 .touch {
-  position: fixed; left: 0; right: 0; bottom: 0;
-  padding: 0 var(--gutter-r) var(--gutter-b) var(--gutter-l);
-  display: flex; justify-content: space-between; gap: 12px; pointer-events: none;
+  --steer-w: 156px; --pad-h: 64px;
+  position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: none;
 }
-.touch .group { display: flex; gap: 10px; }
-.tbtn {
-  pointer-events: auto; width: 72px; height: 72px; border: 1px solid var(--border);
-  background: var(--glass); color: var(--text); font-family: var(--font-display); font-weight: 700;
-  font-size: 15px; letter-spacing: .08em; text-transform: uppercase;
-  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
-  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); touch-action: none;
+.touch * { -webkit-touch-callout: none; }
+/* zone de volant : toute la moitié basse gauche de l'écran */
+.steer-zone {
+  position: absolute; left: 0; bottom: 0; width: 50%; height: 58%;
+  pointer-events: auto; touch-action: none;
 }
-.tbtn svg { width: 28px; height: 28px; fill: currentColor; }
-.tbtn.down { background: var(--surface-2); color: var(--accent-2); }
-.tbtn.nitro-btn { color: var(--success); }
-.tbtn.nitro-btn.down { background: var(--success); color: var(--on-accent); }
-.pedals { display: flex; flex-direction: column; gap: 8px; }
-.pedals .nitro-btn { width: 84px; height: 44px; }
-.tbtn.gas-btn { width: 84px; height: 92px; background: var(--accent); color: var(--on-accent); border-color: transparent; font-size: 17px; }
-.tbtn.gas-btn.down { background: #ff8a33; box-shadow: var(--glow-accent); color: var(--on-accent); }
-.touch .group { align-items: flex-end; }
+.steer-pad {
+  position: absolute; left: var(--gutter-l); bottom: var(--gutter-b);
+  width: var(--steer-w); height: var(--pad-h); display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, rgba(30, 33, 48, .62), rgba(14, 16, 24, .72));
+  -webkit-backdrop-filter: blur(12px) saturate(1.2); backdrop-filter: blur(12px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, .1);
+  clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+  transition: border-color 120ms, background-color 120ms;
+}
+.steer-pad.active { border-color: rgba(0, 229, 255, .45); }
+.steer-track {
+  position: absolute; left: 22px; right: 22px; top: 50%; height: 4px; translate: 0 -50%;
+  background: rgba(255, 255, 255, .1);
+}
+.steer-track::before { content: ""; position: absolute; left: 50%; top: -5px; width: 2px; height: 14px; translate: -50% 0; background: rgba(255, 255, 255, .35); }
+.steer-fill {
+  position: absolute; top: 0; bottom: 0; width: 50%; left: 50%;
+  background: var(--accent-2); box-shadow: 0 0 10px rgba(0, 229, 255, .7); transform: scaleX(0); transform-origin: 0 50%;
+}
+.steer-track[data-side="l"] .steer-fill { left: 0; }
+.steer-chev { position: absolute; top: 50%; width: 20px; height: 20px; translate: 0 -50%; fill: none; stroke: var(--muted); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.steer-chev--l { left: 8px; }
+.steer-chev--r { right: 8px; }
+.steer-knob {
+  position: relative; z-index: 1; width: 56px; height: 56px; display: grid; place-items: center;
+  border-radius: 50%; background: radial-gradient(circle at 50% 35%, #2a2e42, #12141d 70%);
+  border: 1px solid rgba(255, 255, 255, .16); box-shadow: 0 4px 14px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .12);
+  transition: transform 160ms var(--ease);
+}
+.steer-pad.active .steer-knob { transition: none; border-color: var(--accent-2); box-shadow: 0 0 14px rgba(0, 229, 255, .55), inset 0 1px 0 rgba(255, 255, 255, .12); }
+.steer-knob svg { width: 44px; height: 44px; fill: none; stroke-linecap: round; }
+.steer-knob .w-rim { stroke: var(--text); stroke-width: 4; }
+.steer-knob .w-hub { fill: var(--text); }
+.steer-knob .w-spoke { stroke: var(--text); stroke-width: 3.4; }
+.steer-knob .w-mark { stroke: var(--accent-2); stroke-width: 4; }
+
+/* pédales et nitro */
+.pedal-zone {
+  position: absolute; right: var(--gutter-r); bottom: var(--gutter-b);
+  display: grid; grid-template-columns: 84px 64px; grid-template-rows: auto 136px; gap: 12px 10px; align-items: end;
+  pointer-events: none;
+}
+.pedal, .nitro-touch {
+  pointer-events: auto; touch-action: none; position: relative; padding: 0; cursor: pointer; color: var(--text);
+  -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.pedal {
+  grid-row: 2; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px;
+  padding-bottom: 10px; overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, .07) 0 3px, transparent 3px 11px),
+    linear-gradient(180deg, rgba(44, 48, 66, .78), rgba(16, 18, 26, .86));
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%, 0 10px);
+  transform: perspective(420px) rotateX(0deg); transform-origin: 50% 100%;
+  transition: transform 140ms var(--ease), border-color 120ms, filter 120ms;
+}
+.pedal--brake { grid-column: 1; height: 96px; }
+.pedal--gas { grid-column: 2; height: 136px; }
+/* remplissage progressif : la pédale « s'enfonce » et se remplit de bas en haut */
+.pedal-fill {
+  position: absolute; inset: 0; transform: scaleY(0); transform-origin: 50% 100%;
+  transition: transform 170ms cubic-bezier(.3, .7, .2, 1);
+}
+.pedal--gas .pedal-fill { background: linear-gradient(0deg, rgba(255, 106, 0, .9), rgba(255, 106, 0, .25)); }
+.pedal--brake .pedal-fill { background: linear-gradient(0deg, rgba(255, 31, 75, .85), rgba(255, 31, 75, .2)); }
+.pedal-icon { position: relative; width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.pedal-label { position: relative; font-family: var(--font-display); font-weight: 700; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; line-height: 1; }
+.pedal--gas { border-color: rgba(255, 106, 0, .55); }
+.pedal--gas .pedal-icon { color: var(--accent); }
+.pedal--brake .pedal-icon { color: #ff6a85; }
+.pedal.down { transform: perspective(420px) rotateX(16deg) scale(.97); filter: brightness(1.15); }
+.pedal.down .pedal-fill { transform: scaleY(1); }
+.pedal--gas.down { border-color: var(--accent); box-shadow: var(--glow-accent); }
+.pedal--brake.down { border-color: var(--danger); }
+.pedal.down .pedal-icon, .pedal.down .pedal-label { color: var(--on-accent); }
+
+.nitro-touch {
+  --n: 0; grid-row: 1; grid-column: 1; justify-self: center;
+  width: 68px; height: 68px; border-radius: 50%; border: 0; display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 38%, rgba(44, 50, 40, .9), rgba(14, 16, 22, .9) 68%);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+  transition: transform 120ms var(--ease), filter 120ms;
+}
+/* jauge : anneau conique vert acide */
+.nt-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(var(--success) calc(var(--n) * 360deg), rgba(255, 255, 255, .1) 0);
+  -webkit-mask: radial-gradient(circle, transparent 0 27px, #000 28px);
+          mask: radial-gradient(circle, transparent 0 27px, #000 28px);
+}
+.nt-icon { position: relative; width: 26px; height: 26px; margin-top: -8px; fill: var(--success); }
+.nt-label { position: absolute; bottom: 13px; font-family: var(--font-display); font-weight: 700; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--success); }
+.nitro-touch.empty { filter: grayscale(.8) brightness(.8); }
+.nitro-touch.down { transform: scale(.93); }
+.nitro-touch.active { box-shadow: 0 0 16px rgba(182, 255, 0, .6), 0 0 36px rgba(182, 255, 0, .25); animation: nt-pulse 420ms ease-in-out infinite alternate; }
+@keyframes nt-pulse { to { filter: brightness(1.25); } }
+.pedal:focus-visible, .nitro-touch:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+/* téléphone couché : le bouton Nitro passe à gauche des pédales pour ne pas cacher la route */
+@media (max-height: 500px) {
+  .touch { --pad-h: 60px; }
+  .pedal-zone { grid-template-columns: 68px 84px 64px; grid-template-rows: 120px; }
+  .nitro-touch { grid-row: 1; grid-column: 1; align-self: end; }
+  .pedal { grid-row: 1; }
+  .pedal--gas { grid-column: 3; height: 120px; }
+  .pedal--brake { grid-column: 2; height: 88px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .steer-knob, .pedal, .pedal-fill, .nitro-touch { transition: none; }
+  .pedal.down { transform: none; }
+  .nitro-touch.active { animation: none; }
+}
 
 /* ---------- Écrans ---------- */
 .screen {
@@ -297,24 +401,142 @@ h2.big {
 .paint[aria-pressed="true"] { border-color: var(--accent-2); box-shadow: 0 0 10px rgba(0, 229, 255, .6); }
 .paint:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 .paint-name { font-size: 13px; color: var(--muted); }
-/* ---------- Choix du terrain ---------- */
-.map-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-width: 440px; }
+/* ---------- Choix du terrain : carrousel de grandes cartes ---------- */
+.screen--maps {
+  flex-direction: column; align-items: stretch; gap: 14px; overflow: hidden;
+  padding-block: max(18px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px));
+  background:
+    radial-gradient(90% 50% at 50% 110%, rgba(255, 106, 0, .16), transparent 60%),
+    radial-gradient(60% 40% at 90% 100%, rgba(0, 229, 255, .1), transparent 60%),
+    linear-gradient(180deg, rgba(10, 11, 16, .97), rgba(10, 11, 16, .93));
+}
+.screen--maps[data-tod="jour"] { background:
+    radial-gradient(90% 50% at 50% 110%, rgba(255, 106, 0, .12), transparent 60%),
+    radial-gradient(60% 40% at 90% 100%, rgba(0, 229, 255, .14), transparent 60%),
+    linear-gradient(180deg, rgba(12, 16, 26, .96), rgba(10, 11, 16, .93)); }
+.maps-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; animation: slide-in 300ms var(--ease) both; }
+.maps-title {
+  margin: 4px 0 0; font-family: var(--font-display); font-weight: 700; font-style: italic; text-transform: uppercase;
+  font-size: clamp(30px, 4.6vw, 52px); line-height: .9; transform: skewX(-6deg); transform-origin: left bottom;
+}
+.maps-count { flex: none; white-space: nowrap; margin: 0; font-family: var(--font-hud); font-weight: 700; font-style: italic; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: .08em; }
+.maps-count b { font-size: 28px; color: var(--text); }
+
+.map-carousel { position: relative; flex: 1 1 auto; min-height: 0; margin-inline: calc(-1 * var(--gutter-l)) calc(-1 * var(--gutter-r)); }
+.map-grid {
+  --card-w: min(68vw, 900px);
+  height: 100%; display: flex; gap: clamp(14px, 2.4vw, 28px); align-items: stretch;
+  overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+  padding-inline: calc((100% - var(--card-w)) / 2); padding-block: 6px; box-sizing: border-box;
+  scrollbar-width: none; touch-action: pan-x; -webkit-overflow-scrolling: touch;
+}
+.map-grid::-webkit-scrollbar { display: none; }
+.map-grid.dragging { scroll-snap-type: none; cursor: grabbing; }
 .map-card {
-  display: flex; flex-direction: column; gap: 8px; padding: 8px 8px 10px; cursor: pointer; text-align: left;
-  background: var(--glass); color: var(--text); border: 1px solid var(--border); border-radius: 2px;
-  font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: .04em; text-transform: uppercase;
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
-  transition: transform 120ms var(--ease), background-color 120ms;
+  position: relative; flex: 0 0 var(--card-w); height: 100%; max-height: 600px; align-self: center;
+  display: block; padding: 0; overflow: hidden; cursor: pointer; text-align: left; color: var(--text);
+  background: var(--surface); border: 0; border-radius: 0; font: inherit;
+  scroll-snap-align: center; scroll-snap-stop: always;
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+  opacity: .45; transform: scale(.93); filter: saturate(.7);
+  transition: opacity 250ms var(--ease), transform 250ms var(--ease), filter 250ms;
 }
-.map-card:hover { transform: translateX(2px); background: var(--surface-2); }
-.map-card:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; clip-path: none; }
-.map-card[aria-pressed="true"] { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent-2); }
-.map-art { position: relative; display: block; height: 62px; overflow: hidden; background: linear-gradient(var(--sky) 0 50%, var(--ground) 50% 100%); }
-.map-art::before {
-  content: ""; position: absolute; left: 50%; bottom: 0; width: 76%; height: 50%; translate: -50% 0;
-  background: var(--road); clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%);
+.map-card[aria-pressed="true"] { opacity: 1; transform: none; filter: none; }
+.map-card:hover { opacity: .8; }
+.map-card[aria-pressed="true"]:hover { opacity: 1; }
+/* liseré de sélection cyan + cadre intérieur (le clip-path couperait un contour extérieur) */
+.map-card::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1);
 }
-.map-art::after { content: ""; position: absolute; left: 0; right: 0; top: 46%; height: 5%; background: var(--accent); opacity: .9; }
+.map-card[aria-pressed="true"]::after { box-shadow: inset 4px 0 0 var(--accent-2), inset 0 0 0 1px rgba(0, 229, 255, .45); }
+.map-card:focus-visible { outline: 3px solid var(--accent-2); outline-offset: -6px; }
+.map-art { position: absolute; inset: 0; display: block; }
+.map-art svg { width: 100%; height: 100%; display: block; }
+.map-shade {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(10, 11, 16, 0) 38%, rgba(10, 11, 16, .72) 64%, rgba(10, 11, 16, .95) 100%);
+}
+.map-sel {
+  position: absolute; top: 16px; left: 18px; display: none; align-items: center; gap: 6px; padding: 5px 14px 5px 10px;
+  background: var(--accent-2); color: var(--on-accent); font-family: var(--font-display); font-weight: 700; font-size: 14px;
+  letter-spacing: .12em; text-transform: uppercase; transform: skewX(-10deg);
+}
+.map-sel svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.map-card[aria-pressed="true"] .map-sel { display: inline-flex; }
+.map-info {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; gap: 10px;
+  padding: clamp(16px, 3vw, 32px) clamp(18px, 3vw, 36px);
+}
+.map-title {
+  display: block; font-family: var(--font-display); font-weight: 700; font-style: italic; text-transform: uppercase;
+  font-size: clamp(36px, 5.4vw, 72px); line-height: .88; transform: skewX(-6deg); transform-origin: left bottom;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, .5);
+}
+.map-desc { display: block; max-width: 54ch; font-size: 15px; line-height: 1.45; color: #D3D7E2; }
+.map-facts { display: flex; gap: 22px; }
+.fact { display: flex; flex-direction: column; gap: 2px; padding-left: 10px; border-left: 2px solid var(--map-accent, var(--accent-2)); }
+.fact b { font-family: var(--font-hud); font-weight: 800; font-style: italic; font-size: 20px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.map-zones { display: flex; flex-wrap: wrap; gap: 6px; }
+.map-zones span {
+  padding: 3px 10px; font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--text);
+  background: rgba(30, 33, 48, .75); border: 1px solid var(--border); transform: skewX(-10deg);
+}
+
+.map-arrow {
+  position: absolute; top: 50%; z-index: 2; width: 52px; height: 76px; translate: 0 -50%; display: grid; place-items: center;
+  background: var(--glass); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid var(--border);
+  color: var(--text); cursor: pointer; clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  transition: color 120ms, background-color 120ms, opacity 120ms;
+}
+.map-arrow svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.map-arrow--prev { left: max(10px, calc((100% - var(--card-w, 68vw)) / 2 - 70px)); }
+.map-arrow--next { right: max(10px, calc((100% - var(--card-w, 68vw)) / 2 - 70px)); }
+.map-arrow:hover:not(:disabled) { color: var(--accent-2); background: var(--surface-2); }
+.map-arrow:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; clip-path: none; }
+.map-arrow:disabled { opacity: .25; cursor: default; }
+.map-dots { display: flex; justify-content: center; gap: 6px; }
+.map-dots i { width: 18px; height: 4px; background: var(--surface-2); transform: skewX(-20deg); transition: width 200ms var(--ease), background-color 200ms; }
+.map-dots i.on { width: 36px; background: var(--accent-2); box-shadow: 0 0 8px rgba(0, 229, 255, .6); }
+
+.maps-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; animation: slide-in 320ms 60ms var(--ease) both; }
+.maps-bar .tod { align-self: center; }
+.maps-bar .tod-btn { min-height: 52px; padding: 0 26px; font-size: 18px; }
+.maps-bar .tod-btn svg { width: 20px; height: 20px; }
+.maps-bar .tod-btn span { transform: skewX(10deg); }
+.tod-btn:not([aria-pressed="true"]):hover { color: var(--text); }
+.maps-bar .actions { flex-wrap: nowrap; }
+.btn--go { min-height: 60px; padding: 0 44px; font-size: 24px; box-shadow: var(--glow-accent); }
+.btn--go svg { width: 24px; height: 24px; fill: currentColor; }
+.sr-only { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (max-width: 760px) {
+  .screen--maps { gap: 10px; }
+  .map-grid { --card-w: calc(100vw - var(--gutter-l) - var(--gutter-r) - 28px); gap: 12px; }
+  .map-arrow { display: none; }
+  .map-card { max-height: none; }
+  /* carte haute et étroite : l'illustration occupe le haut (horizon et route visibles), les infos le bas */
+  .map-art { bottom: auto; height: 66%; }
+  .map-shade { background: linear-gradient(180deg, rgba(10, 11, 16, 0) 30%, rgba(10, 11, 16, .6) 52%, rgba(10, 11, 16, .97) 68%, var(--bg) 100%); }
+  .map-info { gap: 8px; }
+  .map-desc { font-size: 14px; }
+  .maps-bar { flex-direction: column; align-items: stretch; gap: 12px; }
+  .maps-bar .tod { display: flex; align-self: stretch; }
+  .maps-bar .tod-btn { flex: 1; justify-content: center; }
+  .maps-bar .actions { width: 100%; }
+  .maps-bar .actions .btn--go { flex: 1; }
+}
+@media (max-height: 520px) {
+  .maps-head .eyebrow { display: none; }
+  .maps-title { font-size: 26px; }
+  .map-desc, .map-zones { display: none; }
+  .map-title { font-size: 34px; }
+  .maps-bar { flex-direction: row; flex-wrap: nowrap; }
+  .maps-bar .tod-btn, .btn--go { min-height: 48px; }
+  .btn--go { font-size: 20px; padding: 0 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-card { transform: none; transition: opacity 120ms; }
+}
 .tod { display: inline-flex; align-self: flex-start; border: 1px solid var(--border); transform: skewX(-10deg); }
 .tod-btn, .km-btn {
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 20px; cursor: pointer;
@@ -423,11 +645,11 @@ h2.big {
 @media (pointer: coarse) {
   .only-touch { display: block; }
   .only-desk { display: none; }
-  .hud-bottom { bottom: calc(var(--gutter-b) + 156px); }
-  .speedo { width: 112px; height: 112px; }
-  .speedo-read span:first-child { font-size: 28px; }
-  .nitro { min-width: 150px; padding: 8px 12px; }
-  .nitro .label kbd { display: none; }
+  /* compteur au-dessus du volant (à gauche) ; la jauge nitro est dans le bouton Nitro rond */
+  .hud-bottom { bottom: calc(var(--gutter-b) + 64px + 10px); right: auto; }
+  .speedo { width: 116px; height: 116px; }
+  .speedo-read span:first-child { font-size: 30px; }
+  .hud-bottom .nitro { display: none; }
   .duel-board { min-width: 0; width: 200px; }
 }
 @media (max-width: 760px) {
@@ -438,6 +660,11 @@ h2.big {
   .garage-hint { display: none; }
 }
 @media (max-width: 560px) {
+  /* téléphone debout : boutons Menu / Caméra en icônes carrées entre Temps et Score (plus de chevauchement) */
+  .hud-btns { gap: 6px; top: calc(var(--gutter-t) + 84px); left: auto; right: var(--gutter-r); translate: none; flex-direction: column; }
+  .cam-btn { min-width: 48px; min-height: 48px; padding: 0; justify-content: center; clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+  .cam-btn span { display: none; }
+  .cam-btn svg { width: 20px; height: 20px; }
   .p-time { min-width: 0; padding: 8px 12px 10px; }
   .p-score { min-width: 0; padding: 8px 12px 10px; }
   .toasts { top: calc(var(--gutter-t) + 96px); }

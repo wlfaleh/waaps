@@ -146,10 +146,10 @@ function updateCamera(dt, sP) {
     desired = _eye.clone(); look = _fwd.clone();
   } else {
     // distance : la voiture s'éloigne quand elle accélère, se rapproche au freinage
-    const distT = C.dist * (portrait ? 0.92 : 1) + p * 0.6 + clamp(lonAcc * 0.05, -0.4, 0.6);
+    const distT = C.dist * (portrait ? 1.3 : 1) + p * 0.6 + clamp(lonAcc * 0.05, -0.4, 0.6);
     camDistDyn += (distT - camDistDyn) * Math.min(1, dt * 2.5);
     const dist = camDistDyn, side = -steer * 0.35 * Math.min(1, p * 2);
-    desired = new THREE.Vector3(car.x - fx * dist + rx * side, car.y + C.h * (portrait ? 1.08 : 1) + p * 0.12, car.z - fz * dist + rz * side);
+    desired = new THREE.Vector3(car.x - fx * dist + rx * side, car.y + C.h * (portrait ? 1.25 : 1) + p * 0.12, car.z - fz * dist + rz * side);
     const ground = trackPoint(sP - dist / M, playerX * RW, tmpB).y + 0.6;
     if (desired.y < ground) desired.y = ground;   // jamais sous la route dans les côtes
     // regarde la voiture et un peu le virage qui arrive
