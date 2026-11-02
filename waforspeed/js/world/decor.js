@@ -40,7 +40,8 @@ function generateDecor(map) {
   for (let n = 0; n < len; n++) if (n === 0 || segments[n].zone !== segments[n - 1].zone || segments[n].zoneIdx !== segments[n - 1].zoneIdx) ranges.push([n, len, segments[n].zone]);
   for (let i = 0; i < ranges.length - 1; i++) ranges[i][1] = ranges[i + 1][0];
   const free = (n) => !segments[((n % len) + len) % len].deco.lamp;
-  const parked = (z0, z1, side, lat) => { for (let n = z0 + 6; n < z1 - 6; n += 5 + Math.floor(D() * 4)) if (D() < 0.55 && free(n)) item(n, { t: 'parked', side, lat, col: Math.floor(D() * 8), kind: D() < 0.3 ? 1 : 0 }); };
+  // voitures garées le long du trottoir : retirées (rendu jugé peu réaliste)
+  const parked = () => {};
   // vie sur la plage : paillotes, serviettes avec baigneurs allongés, gens debout dans l'eau, bord de mer
   const beachLife = (z0, z1, k = 1) => {
     for (let n = z0 + 30 + Math.floor(D() * 40); n < z1 - 10; n += 120 + Math.floor(D() * 80)) item(n, { t: 'beachbar', side: 1, lat: RW + 20 + D() * 6 });
