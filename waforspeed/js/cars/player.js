@@ -6,7 +6,7 @@ let playerMesh = null, playerTailMat = null, flames = [], headlight = null, revL
 function buildPlayer() {
   if (playerMesh) scene.remove(playerMesh);
   playerTailMat = new THREE.MeshBasicMaterial({ color: 0xff3050 });
-  playerMesh = makeCarMesh(myCar, myPaint().hex, { glow: myCar.glow, tailMat: playerTailMat, hq: true });
+  playerMesh = makeCarMesh(myCar, myPaint().hex, { tailMat: playerTailMat, hq: true })   // en course : pas de lueur colorée, ombre naturelle;
   flames = [];
   const fg = new THREE.ConeGeometry(0.11, 1.1, 8); fg.rotateX(Math.PI / 2); fg.translate(0, 0, 0.55);
   for (const x of [-0.45, 0.45]) {
