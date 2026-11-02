@@ -370,6 +370,8 @@ function makeCarMesh(car, paintHex, opts = {}) {
   // LOD du trafic : seules la carrosserie et la peinture projettent une ombre (moins d'appels dans la passe d'ombre)
   if (real && real.lod) body.object.traverse((o) => { if (o.isMesh) { o.castShadow = o.material.userData.wfs === 'paint' || o.material.name === 'wfs_body'; o.receiveShadow = false; } });
   g.add(inner);
+  // conducteur (vrai personnage figé assis) : joueur, trafic et adversaire
+  if (typeof addDriver === 'function' && !opts.noDriver) addDriver(inner, car, opts.tailMat ? 12345 : (Math.random() * 1e9) | 0);
   const sh = new THREE.Mesh(shadowGeo, MAT.shadow);
   sh.scale.set(Wd * 1.5, 1, L * 1.25); sh.position.y = 0.02; g.add(sh);
   const tg = new THREE.Mesh(glowGeo, MAT.tailGlow);
