@@ -19,10 +19,22 @@ Tous trouvés dans des dépôts GitHub publics, avec leur licence d'origine (Ske
 | Alfa Romeo Giulia Quadrifoglio | `alfa-giulia/` — Alfa Romeo Giulia Quadrifoglio | ijiklvn | CC BY 4.0 |
 | BMW M4 Competition | `bmw-m4/` — 2021 BMW M4 Competition | Ricy | CC BY 4.0 |
 | Porsche 911 Carrera 4S | `porsche-911/` — (FREE) Porsche 911 Carrera 4S | Karol Miklas | CC BY-SA 4.0 |
+| Mercedes-AMG A 45 | `mercedes-a45/` — Mercedes-Benz A45 AMG 2018 | Lexyc16 | CC BY-NC 4.0 |
+| Tesla Model 3 | `tesla-model-3/` — Tesla model 3 (free model) | retro_player | CC BY 4.0 |
+| Opel Corsa | `opel-corsa/` — Opel Corsa 2020 (version allégée de Davencode/syncuro-models) | Nieve5677 | CC BY 4.0 |
+| Toyota GT86 | `toyota-gt86/` — Toyota GT86 3D Model (Free) | Mpgs.studio3DModels | CC BY 4.0 |
+| Hyundai Elantra N | `hyundai-elantra-n/` — 2024 Hyundai Elantra N | Ddiaz Design | CC BY-NC 4.0 |
+| Volvo V60 Polestar | `volvo-v60/` — Volvo V60 Polestar (2013) | Myedsu | CC BY 4.0 |
+| Range Rover Sport | `range-rover-sport/` — Land Rover Range Rover Sport - 2023 | Unn Interativa | CC BY 4.0 |
+| Ford Mustang Shelby GT500 | `ford-mustang/` — 2020 Ford Mustang Shelby GT500 | Ddiaz Design | CC BY-NC-SA 4.0 |
+| Lamborghini Gallardo Spyder | `lambo-gallardo/` — 2009 Lamborghini Gallardo LP560-4 Spyder | Ddiaz Design | CC BY 4.0 |
+| Ferrari SF90 XX | `ferrari-sf90/` — Ferrari SF90 XX (vecarz) | vecarz | CC BY 4.0 |
 
-Le jeu ne propose que ces 10 vraies voitures (plus de voiture générée par le code dans le showroom).
-Les licences NC (non commerciales) imposent que le jeu reste gratuit ; la licence SA de la Porsche impose de partager sa version modifiée sous la même licence.
-Les modèles ont été allégés (≈ 100 000 à 140 000 triangles, textures WebP 1024 px) avec glTF-Transform.
+Le jeu ne propose que ces 20 vraies voitures (plus de voiture générée par le code dans le showroom).
+Les licences NC (non commerciales) imposent que le jeu reste gratuit ; les licences SA (Porsche, Mustang, T-Cross, X5) imposent de partager la version modifiée sous la même licence.
+Les modèles ont été allégés (≈ 50 000 à 140 000 triangles, textures WebP 1024 px) avec glTF-Transform.
+Pour la Corsa, la GT86, la Range Rover et l'A 45, dont les sommets ne se soudaient pas, une simplification plus forte a été faite (soudure par position, normales recalculées).
+Dans la Volvo, les matériaux `headlight_*` (partagés entre l'avant et l'arrière) ont été renommés `lamp_*` pour que les feux arrière ne s'allument pas en blanc.
 Les licences CC BY-NC-SA interdisent l'usage commercial : le jeu doit rester gratuit.
 
 ## Ajouter ou remplacer un modèle

@@ -1,0 +1,14 @@
+Model Information:
+* title:	2020 Ford Mustang Shelby GT500
+* source:	https://sketchfab.com/3d-models/2020-ford-mustang-shelby-gt500-5e864cfc33294b34b7a43c96646bc9f4
+* author:	Ddiaz Design (https://sketchfab.com/ddiaz-design)
+
+Model License:
+* license type:	CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)
+* requirements:	Author must be credited. No commercial use. Modified versions must have the same license.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "2020 Ford Mustang Shelby GT500" (https://sketchfab.com/3d-models/2020-ford-mustang-shelby-gt500-5e864cfc33294b34b7a43c96646bc9f4) by Ddiaz Design (https://sketchfab.com/ddiaz-design) licensed under CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)
+
+Modifications for WaForSpeed: geometry simplified where needed (meshoptimizer, at most about 120 000 triangles), textures converted to WebP 1024 px, glass transmission replaced by simple transparency, everything embedded in a single glTF JSON file. The body colour is changed in game.
+This modified version is shared under the same license.

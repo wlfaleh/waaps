@@ -1,0 +1,13 @@
+Model Information:
+* title:	Tesla model 3 (free model)
+* source:	https://sketchfab.com/3d-models/tesla-model-3-free-model-32277501e715498a9538478f8e7b0e5b
+* author:	retro_player (https://sketchfab.com/brainplayerbrainplayernoob)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Tesla model 3 (free model)" (https://sketchfab.com/3d-models/tesla-model-3-free-model-32277501e715498a9538478f8e7b0e5b) by retro_player (https://sketchfab.com/brainplayerbrainplayernoob) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+Modifications for WaForSpeed: geometry simplified where needed (meshoptimizer, at most about 120 000 triangles), textures converted to WebP 1024 px, glass transmission replaced by simple transparency, everything embedded in a single glTF JSON file. The body colour is changed in game.

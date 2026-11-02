@@ -1,0 +1,13 @@
+Model Information:
+* title:	Toyota GT86 3D Model (Free)
+* source:	https://sketchfab.com/3d-models/toyota-gt86-3d-model-free-ec05296ddf2f4c22a570512245d1fba0
+* author:	Mpgs.studio3DModels (https://sketchfab.com/mpgs.studio)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Toyota GT86 3D Model (Free)" (https://sketchfab.com/3d-models/toyota-gt86-3d-model-free-ec05296ddf2f4c22a570512245d1fba0) by Mpgs.studio3DModels (https://sketchfab.com/mpgs.studio) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+Modifications for WaForSpeed: geometry simplified where needed (meshoptimizer, at most about 120 000 triangles), textures converted to WebP 1024 px, glass transmission replaced by simple transparency, everything embedded in a single glTF JSON file. The body colour is changed in game.

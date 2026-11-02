@@ -1,0 +1,13 @@
+Model Information:
+* title:	Ferrari SF90 XX | www.vecarz.com
+* source:	https://sketchfab.com/3d-models/ferrari-sf90-xx-wwwvecarzcom-a9904304806b4549978e28a6068175b6
+* author:	vecarz (https://sketchfab.com/heynic)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Ferrari SF90 XX | www.vecarz.com" (https://sketchfab.com/3d-models/ferrari-sf90-xx-wwwvecarzcom-a9904304806b4549978e28a6068175b6) by vecarz (https://sketchfab.com/heynic) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+Modifications for WaForSpeed: geometry simplified where needed (meshoptimizer, at most about 120 000 triangles), textures converted to WebP 1024 px, glass transmission replaced by simple transparency, everything embedded in a single glTF JSON file. The body colour is changed in game.
