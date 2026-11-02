@@ -118,7 +118,8 @@ function addDriver(inner, car, seed) {
   // le buste fait ~0,85 m : sur les voitures très basses on le rétrécit un peu pour qu'il reste dans l'habitacle
   const sc = Math.min(1, Math.max(0.86, (m.position.y - 0.35) / 0.85));
   m.scale.setScalar(sc * (0.97 + R() * 0.05));
-  m.rotation.y = (R() - 0.5) * 0.12;
+  // le personnage regarde vers +z, la voiture avance vers -z : demi-tour pour faire face au volant
+  m.rotation.y = Math.PI + (R() - 0.5) * 0.12;
   m.castShadow = false; m.receiveShadow = false;
   m.name = 'conducteur';
   inner.add(m);
