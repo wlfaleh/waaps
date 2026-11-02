@@ -220,7 +220,9 @@ function prepareModel(root, car, spec) {
   const tb = lampAt('tail'), hb = lampAt('head');
   const lampY = tb && tb.max.z > car.d.L * 0.3 && tb.getSize(new THREE.Vector3()).y < 0.5 ? (tb.min.y + tb.max.y) / 2 : null;
   const headY = hb && hb.min.z < -car.d.L * 0.3 && hb.getSize(new THREE.Vector3()).y < 0.5 ? (hb.min.y + hb.max.y) / 2 : null;
-  return { lampY, headY, root: wrap, repaint: spec.repaint === false ? false : repaint, tris };
+  // position des phares : bord extérieur et avant du bloc optique (pour poser le halo sur le verre)
+  const headX = headY !== null ? Math.max(Math.abs(hb.min.x), Math.abs(hb.max.x)) : null, headZ = headY !== null ? hb.min.z : null;
+  return { lampY, headY, headX, headZ, root: wrap, repaint: spec.repaint === false ? false : repaint, tris };
 }
 
 const repaintCache = new Map();
@@ -255,7 +257,7 @@ function realBody(car, paintHex, opts) {
   });
   const { wheels, rw } = rigWheels(obj, car, !opts.traffic, R.wheelRx);
   return {
-    object: obj, wheels, rw, lampY: R.lampY, headY: R.headY, lod: !!R.lod,
+    object: obj, wheels, rw, lampY: R.lampY, headY: R.headY, headX: R.headX, headZ: R.headZ, lod: !!R.lod,
     setBrake: (on) => { for (const t of tails) if (t.emissive) { t.emissive.set(0xff2040); t.emissiveIntensity = on ? 2.5 : 0.4; } }
   };
 }
@@ -436,17 +438,30 @@ function makeCarMesh(car, paintHex, opts = {}) {
   if (!MAT.haloTail) {
     const sm = (c, o) => new THREE.SpriteMaterial({ map: TEXS.radial, color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
     MAT.haloTail = sm(0xff1a30, 0.55); MAT.haloBrake = sm(0xff2038, 1); MAT.haloRev = sm(0xf4f6ff, 0.7); MAT.haloHead = sm(0xfff1d6, 0.9);
+    MAT.headPool = new THREE.MeshBasicMaterial({ map: beamTex('pool'), color: 0xfff0d8, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 });
+    MAT.beamCone = new THREE.MeshBasicMaterial({ map: beamTex('cone'), color: 0xfff3e0, transparent: true, opacity: 0.08, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     MAT.revGlow = new THREE.MeshBasicMaterial({ map: TEXS.radial, color: 0xdfe6ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
   }
   const ly = real && real.lampY ? real.lampY : car.d.tail - 0.25, hy = real && real.headY ? real.headY : car.d.nose - 0.12;
-  const lamps = { tail: [], rev: [], head: [] };
+  const lamps = { tail: [], rev: [], head: [], cones: [] };
+  // bord extérieur du phare → centre du halo un peu vers l'intérieur ; avant du phare
+  const hx = real && real.headX ? Math.min(Wd / 2 - 0.12, real.headX - 0.14) : Wd / 2 - 0.3;
+  const hz = real && real.headZ ? Math.max(-L / 2 - 0.05, real.headZ) : -L / 2 + 0.02;
   for (const side of [-1, 1]) {
     const t = new THREE.Sprite(MAT.haloTail); t.position.set(side * (Wd / 2 - 0.18), ly, L / 2 + 0.06); t.scale.set(0.55, 0.55, 1); t.visible = false; inner.add(t); lamps.tail.push(t);
     if (!opts.traffic) {
       const r = new THREE.Sprite(MAT.haloRev); r.position.set(side * (Wd / 2 - 0.42), ly - 0.04, L / 2 + 0.07); r.scale.set(0.3, 0.3, 1); r.visible = false; inner.add(r); lamps.rev.push(r);
-      const h = new THREE.Sprite(MAT.haloHead); h.position.set(side * (Wd / 2 - 0.25), hy, -L / 2 - 0.08); h.scale.set(0.9, 0.9, 1); h.visible = false; inner.add(h); lamps.head.push(h);
+    }
+    // phares : halo posé sur le verre du phare (position mesurée sur le vrai modèle)
+    const h = new THREE.Sprite(MAT.haloHead); h.position.set(side * hx, hy, hz - 0.03); h.scale.set(opts.traffic ? 0.75 : 0.85, opts.traffic ? 0.75 : 0.85, 1); h.visible = false; inner.add(h); lamps.head.push(h);
+    if (!opts.traffic) {
+      // faisceau dans l'air (léger, visible sous la pluie / dans la brume)
+      const c = new THREE.Mesh(beamConeGeo(), MAT.beamCone); c.position.set(side * hx, hy, hz - 0.05); c.rotation.x = -0.035; c.rotation.y = side * -0.04; c.visible = false; c.renderOrder = 3; inner.add(c); lamps.cones.push(c);
     }
   }
+  // tache de lumière des phares sur la route, devant la voiture (toutes les voitures)
+  const pool = new THREE.Mesh(glowGeo, MAT.headPool);
+  pool.scale.set(Math.max(8.5, Wd * 4.4), 1, 44); pool.position.set(0, 0.09, -L / 2 - 21.6); pool.visible = false; pool.renderOrder = 2; g.add(pool);
   const lightState = { k: '' };
   const setLights = (night, brake, rev) => {
     const k = (night ? 1 : 0) + (brake ? 2 : 0) + (rev ? 4 : 0);
@@ -454,6 +469,8 @@ function makeCarMesh(car, paintHex, opts = {}) {
     for (const t of lamps.tail) { t.visible = night || brake; t.material = brake ? MAT.haloBrake : MAT.haloTail; t.scale.setScalar(brake ? 0.9 : 0.55); }
     for (const r of lamps.rev) r.visible = !!rev;
     for (const h of lamps.head) h.visible = !!night;
+    for (const c of lamps.cones) c.visible = !!night;
+    pool.visible = !!night;
     tg.visible = night || brake || rev; tg.material = rev ? MAT.revGlow : brake ? MAT.tailGlowBrake : MAT.tailGlow;   // reflet discret des feux sur la route
     if (body.setBrake) body.setBrake(brake || night, rev);
   };
@@ -483,6 +500,48 @@ function makeCarMesh(car, paintHex, opts = {}) {
   return g;
 }
 let shadowGeo = null, glowGeo = null, blinkGeo = null, blurGeo = null;
+/* faisceaux des phares : cône ouvert (sommet sur le phare, s'ouvre vers l'avant) */
+let coneGeo = null;
+function beamConeGeo() {
+  if (coneGeo) return coneGeo;
+  const len = 11;
+  coneGeo = new THREE.ConeGeometry(1.25, len, 20, 1, true);
+  coneGeo.rotateX(Math.PI / 2);        // sommet vers +z
+  coneGeo.translate(0, 0, -len / 2);   // sommet sur le phare, ouverture vers l'avant (-z)
+  coneGeo.scale(1, 0.55, 1);           // faisceau aplati (route)
+  return coneGeo;
+}
+/* textures des faisceaux : « pool » = tache sur la route (étroite près de la voiture, large et douce au loin),
+   « cone » = dégradé le long du faisceau */
+function beamTex(kind) {
+  const c = document.createElement('canvas'), W = 128, H = 256; c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  if (kind === 'cone') {
+    const gr = g.createLinearGradient(0, 0, 0, H);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  } else {
+    // haut du canevas = loin devant ; bas = pare-chocs
+    const img = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) {
+      const t = 1 - y / (H - 1);                     // 0 au pare-chocs, 1 au bout du faisceau
+      const half = 0.26 + 0.24 * Math.pow(t, 0.5);    // le faisceau s'élargit
+      const ss = (a, b, v) => { const k = Math.min(1, Math.max(0, (v - a) / (b - a))); return k * k * (3 - 2 * k); };
+      // monte juste devant le pare-chocs, reste fort sur la route devant, s'éteint au bout
+      const inten = (0.35 + 0.65 * ss(0.02, 0.22, t)) * (1 - ss(0.68, 1, t));
+      for (let x = 0; x < W; x++) {
+        const u = Math.abs(x / (W - 1) - 0.5);
+        const edge = Math.max(0, 1 - Math.pow(u / half, 3));
+        // deux lobes (phare gauche / droit) qui se rejoignent au loin
+        const lobes = 0.8 + 0.2 * Math.cos((x / (W - 1) - 0.5) * Math.PI * 4) * (1 - t);
+        const a = Math.max(0, Math.min(1, edge * inten * lobes));
+        const i = (y * W + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = a * 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+  }
+  return new THREE.CanvasTexture(c);
+}
 let lastDt = 1 / 60;
 
 /* Version lointaine d'une voiture : une seule géométrie (couleurs par sommet), roues comprises.

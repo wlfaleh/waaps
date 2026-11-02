@@ -14,9 +14,10 @@ function buildPlayer() {
     fl.position.set(x, myCar.d.gc + 0.2, myCar.d.L / 2 + 0.05); fl.visible = false;
     playerMesh.userData.inner.add(fl); flames.push(fl);
   }
-  headlight = new THREE.SpotLight(0xfff1dd, 2.2, 90, 0.5, 0.6, 1.2);
-  headlight.position.set(0, 0.8, -myCar.d.L / 2);
-  const tgt = new THREE.Object3D(); tgt.position.set(0, -0.6, -40);
+  // phares : projecteur large et long, à hauteur des phares, qui éclaire la route et le décor devant
+  headlight = new THREE.SpotLight(0xfff1dd, 2.2, 110, 0.62, 0.55, 1.1);
+  headlight.position.set(0, Math.max(0.6, myCar.d.nose - 0.12), -myCar.d.L / 2 - 0.2);
+  const tgt = new THREE.Object3D(); tgt.position.set(0, -1.2, -34);
   playerMesh.add(tgt); headlight.target = tgt; playerMesh.add(headlight);
   // lumière blanche derrière la voiture en marche arrière (éclaire la route la nuit)
   revLight = new THREE.PointLight(0xe8eeff, 0, 14, 2); revLight.position.set(0, 0.6, myCar.d.L / 2 + 0.8); playerMesh.add(revLight);
