@@ -1,5 +1,22 @@
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<script>
+/* Bloque le zoom du navigateur pendant le jeu : pincement, Ctrl + molette, Ctrl +/-/0
+   (le double tap est déjà bloqué par touch-action: none dans le CSS) */
+(function () {
+  var stop = function (e) { e.preventDefault(); };
+  var opt = { passive: false };
+  document.addEventListener('gesturestart', stop, opt);   // Safari iOS (ignore user-scalable=no)
+  document.addEventListener('gesturechange', stop, opt);
+  document.addEventListener('gestureend', stop, opt);
+  document.addEventListener('touchmove', function (e) { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, opt);
+  document.addEventListener('dblclick', stop, opt);
+  window.addEventListener('wheel', function (e) { if (e.ctrlKey || e.metaKey) e.preventDefault(); }, opt);
+  window.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && /^(\+|=|-|_|0)$/.test(e.key)) e.preventDefault();
+  });
+})();
+</script>
 <title>WaForSpeed</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="WaForSpeed : course de rue arcade en 3D, de nuit, en solo ou en duel.">
