@@ -401,6 +401,7 @@ function makeCarMesh(car, paintHex, opts = {}) {
   inner.add(body.object);
   body.object.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = !o.material.isMeshBasicMaterial; } });
   // LOD du trafic : seules la carrosserie et la peinture projettent une ombre (moins d'appels dans la passe d'ombre)
+  if (real && real.lod) body.object.userData.lod = true;
   if (real && real.lod) body.object.traverse((o) => { if (o.isMesh) { o.castShadow = o.material.userData.wfs === 'paint' || o.material.name === 'wfs_body'; o.receiveShadow = false; } });
   g.add(inner);
   // conducteur (vrai personnage figé assis) : joueur, trafic et adversaire

@@ -68,6 +68,38 @@ function setupDrivers() {
   if (state === 'garage' && typeof setGarageCar === 'function') setGarageCar();
   return true;
 }
+/* Place du conducteur mesurée sur la vraie carrosserie : on lance des rayons verticaux au-dessus de la
+   place conducteur pour trouver le toit (hauteur et étendue avant/arrière). Calculé une fois par modèle. */
+const seatCache = new Map();
+function measureSeat(inner, car) {
+  const d = car.d, key = car.id + (inner.children[0] && inner.children[0].userData.lod ? ':lod' : '');
+  if (seatCache.has(key)) return seatCache.get(key);
+  const meshes = [];
+  inner.updateMatrixWorld(true);
+  inner.traverse((o) => { if (o.isMesh && !o.isSprite && o.visible && o.geometry && o.geometry.attributes.position) meshes.push(o); });
+  const ray = new THREE.Raycaster(), down = new THREE.Vector3(0, -1, 0), from = new THREE.Vector3();
+  const x = -d.W * 0.2, N = 40, tops = [];
+  for (let i = 0; i <= N; i++) {
+    const z = -d.L * 0.5 + (d.L * i) / N;
+    from.set(x, d.H + 2, z); ray.set(from, down); ray.far = d.H + 2;
+    const hit = meshes.length ? ray.intersectObjects(meshes, false)[0] : null;
+    tops.push({ z, y: hit ? hit.point.y : -1 });
+  }
+  let maxY = -1; for (const t of tops) maxY = Math.max(maxY, t.y);
+  let seat = null;
+  if (maxY > d.H * 0.6) {
+    // haut du pare-brise : premier point (depuis l'avant) à moins de 5 cm du sommet ; la tête est ~42 cm derrière
+    const zW = tops.find((t) => t.y >= maxY - 0.05).z;
+    let zEnd = zW; for (const t of tops) if (t.y > maxY - 0.09) zEnd = t.z;
+    const zHead = Math.max(zW + 0.15, Math.min(zW + 0.42, zEnd - 0.3));
+    // hauteur du toit juste au-dessus de la tête (interpolée sur le profil)
+    const f = (zHead + d.L * 0.5) / d.L * N, i0 = Math.floor(f), a0 = tops[i0], a1 = tops[Math.min(N, i0 + 1)];
+    const yRoof = Math.min(maxY, a0.y + (a1.y - a0.y) * (f - i0));
+    seat = { x, z: zHead, top: yRoof - 0.13 };
+  }
+  seatCache.set(key, seat);
+  return seat;
+}
 /* ajoute un conducteur dans une voiture (inner = groupe de la carrosserie, qui penche avec la suspension) */
 function addDriver(inner, car, seed) {
   if (DRV.status !== 'ok' || !DRV.busts.length) return null;
@@ -75,12 +107,17 @@ function addDriver(inner, car, seed) {
   const look = DRV.mats[(R() * DRV.mats.length) | 0];
   const busts = DRV.busts.filter((_, i) => (i < 3) === (look.sex === 'homme'));
   const d = car.d, m = new THREE.Mesh(busts[(R() * busts.length) | 0], look.m);
-  // place du conducteur (volant à gauche), tête juste sous le toit, un peu en arrière du milieu
-  const headTop = Math.min(d.H - 0.12, 1.33 + Math.max(0, d.H - 1.45) * 0.6);
-  // moteur central (Lamborghini, Ferrari) : habitacle en avant ; sinon conducteur juste en avant du milieu
-  const mid = car.id === 'gallardo' || car.id === 'sf90';
-  m.position.set(-d.W * 0.2, headTop, mid ? -d.L * 0.12 : -d.L * 0.02);
-  m.scale.setScalar(0.97 + R() * 0.06);
+  let seat = null;
+  try { seat = measureSeat(inner, car); } catch (e) { seat = null; }
+  if (seat) m.position.set(seat.x, seat.top, seat.z);
+  else {
+    // pas de toit mesurable (silhouette procédurale) : estimation d'après les dimensions
+    const mid = car.id === 'gallardo' || car.id === 'sf90';
+    m.position.set(-d.W * 0.2, Math.min(d.H - 0.13, 1.33 + Math.max(0, d.H - 1.45) * 0.6), mid ? -d.L * 0.12 : -d.L * 0.02);
+  }
+  // le buste fait ~0,85 m : sur les voitures très basses on le rétrécit un peu pour qu'il reste dans l'habitacle
+  const sc = Math.min(1, Math.max(0.86, (m.position.y - 0.35) / 0.85));
+  m.scale.setScalar(sc * (0.97 + R() * 0.05));
   m.rotation.y = (R() - 0.5) * 0.12;
   m.castShadow = false; m.receiveShadow = false;
   m.name = 'conducteur';
