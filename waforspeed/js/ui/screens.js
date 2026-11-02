@@ -530,7 +530,7 @@ function setSteer(v) {
   if (!steerUI.raf) steerUI.raf = requestAnimationFrame(steerTick);
 }
 steerUI.zone.addEventListener('pointerdown', (e) => {
-  if (steerUI.id !== null) return;
+  if (steerMode === 'fleches' || steerUI.id !== null) return;   // mode flèches : ce sont les boutons qui gèrent
   e.preventDefault();
   steerUI.id = e.pointerId;
   try { steerUI.zone.setPointerCapture(e.pointerId); } catch (err) { /* déjà relâché */ }
@@ -582,6 +582,20 @@ function resetTouch() {
   steerUI.id = null; touchSteer = 0; steerUI.full = false; drawSteer();
   for (const b of pedals) { if (b.dataset.pid) input[b.dataset.key] = false; b.dataset.pid = ''; b.classList.remove('down'); }
 }
+/* direction au choix : « glisser » (volant analogique) ou « flèches » (deux boutons gauche / droite) */
+let steerMode = store('waforspeed-steer') === 'fleches' ? 'fleches' : 'glisser';
+function setSteerMode(m) {
+  steerMode = m === 'fleches' ? 'fleches' : 'glisser'; store('waforspeed-steer', steerMode);
+  resetTouch();
+  steerUI.pad.hidden = steerMode === 'fleches'; $('#steerArrows').hidden = steerMode !== 'fleches';
+  steerUI.zone.setAttribute('aria-label', steerMode === 'fleches' ? 'Direction : flèches gauche et droite' : 'Volant : glisse le pouce à gauche ou à droite');
+  $('#steerModeBtn').firstChild.textContent = 'Direction : ' + (steerMode === 'fleches' ? 'flèches' : 'glisser');
+  for (const b of $('#setSteer').children) b.setAttribute('aria-pressed', String(b.dataset.v === steerMode));
+}
+for (const b of $('#setSteer').children) b.addEventListener('click', () => setSteerMode(b.dataset.v));
+$('#steerModeBtn').addEventListener('click', () => setSteerMode(steerMode === 'fleches' ? 'glisser' : 'fleches'));
+$('#setSteerRow').hidden = !isTouch;
+setSteerMode(steerMode);
 // texte d'aide du menu (téléphone) accordé aux nouvelles commandes
 { const help = $('#menu .intro.only-touch'); if (help) help.textContent = 'Pouce gauche : glisse pour tourner. À droite : pédales Gaz et Frein (à l\'arrêt : marche arrière), bouton Nitro.'; }
 
