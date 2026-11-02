@@ -64,6 +64,10 @@
       <span class="steer-knob" id="steerKnob"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" class="w-rim"/><circle cx="24" cy="24" r="5.5" class="w-hub"/><path class="w-spoke" d="M5.5 22.5h13M29.5 22.5h13M24 29.5v13"/><path class="w-mark" d="M24 5v5"/></svg></span>
       <svg class="steer-chev steer-chev--r" viewBox="0 0 24 24"><path d="m9.5 5 6.5 7-6.5 7"/></svg>
     </div>
+    <div class="steer-arrows" id="steerArrows" hidden>
+      <button class="arrow-btn" data-key="left" aria-label="Tourner à gauche"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4.5 7.5 12l7.5 7.5"/></svg></button>
+      <button class="arrow-btn" data-key="right" aria-label="Tourner à droite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4.5 7.5 7.5L9 19.5"/></svg></button>
+    </div>
   </div>
   <div class="pedal-zone">
     <button class="nitro-touch" id="nitroTouch" data-key="nitro" aria-label="Nitro" style="--n:.4">
@@ -92,6 +96,7 @@
       <button class="mitem" id="startBtn"><span class="mi-t">Course solo</span><span class="mi-d">Bats le chrono, frôle le trafic, enchaîne les checkpoints</span></button>
       <button class="mitem" id="duelBtn"><span class="mi-t">Duel en ligne</span><span class="mi-d">Défie un ami sur la même route, même trafic</span></button>
       <button class="mitem" id="garageBtn"><span class="mi-t">Showroom</span><span class="mi-d">Choisis ta voiture et sa couleur</span></button>
+      <button class="mitem mitem--small only-touch" id="steerModeBtn"><span class="mi-t">Direction : glisser</span></button>
       <button class="mitem mitem--small" id="qualityBtn"><span class="mi-t">Graphismes : haute</span></button>
     </nav>
     <div class="menu-foot">
@@ -177,6 +182,8 @@
         <button data-v="0">Proche</button><button data-v="1">Loin</button><button data-v="2">Cockpit</button></div></div>
       <div class="set-row"><span class="label">Graphismes</span><div class="seg" id="setGfx" role="group" aria-label="Graphismes">
         <button data-v="high">Haute</button><button data-v="low">Rapide</button></div></div>
+      <div class="set-row" id="setSteerRow"><span class="label">Direction</span><div class="seg" id="setSteer" role="group" aria-label="Direction (tactile)">
+        <button data-v="glisser">Glisser</button><button data-v="fleches">Flèches</button></div></div>
       <div class="set-row"><span class="label">Son</span><div class="seg" id="setSnd" role="group" aria-label="Son">
         <button data-v="on">Activé</button><button data-v="off">Coupé</button></div></div>
     </div>
