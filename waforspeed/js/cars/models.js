@@ -438,8 +438,12 @@ function makeCarMesh(car, paintHex, opts = {}) {
   if (!MAT.haloTail) {
     const sm = (c, o) => new THREE.SpriteMaterial({ map: TEXS.radial, color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
     MAT.haloTail = sm(0xff1a30, 0.55); MAT.haloBrake = sm(0xff2038, 1); MAT.haloRev = sm(0xf4f6ff, 0.7); MAT.haloHead = sm(0xfff1d6, 0.9);
-    MAT.headPool = new THREE.MeshBasicMaterial({ map: beamTex('pool'), color: 0xfff2dc, transparent: true, opacity: 0.46, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 });
-    MAT.beamCone = new THREE.MeshBasicMaterial({ map: beamTex('cone'), color: 0xfff3e0, transparent: true, opacity: 0.08, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    // lumière des phares : MULTIPLIE la couleur réelle de la route (résultat = sol × (1 + faisceau)),
+    // elle éclaircit l'asphalte, les marquages et les trottoirs sans les recouvrir de blanc ; teinte légèrement chaude
+    MAT.headPool = new THREE.MeshBasicMaterial({ map: beamTex('pool'), color: 0xfff0dc, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.DstColorFactor, blendDst: THREE.OneFactor,
+      fog: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 });
+    MAT.beamCone = new THREE.MeshBasicMaterial({ map: beamTex('cone'), color: 0xfff3e0, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     MAT.revGlow = new THREE.MeshBasicMaterial({ map: TEXS.radial, color: 0xdfe6ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
   }
   const ly = real && real.lampY ? real.lampY : car.d.tail - 0.25, hy = real && real.headY ? real.headY : car.d.nose - 0.12;
@@ -537,9 +541,10 @@ function beamTex(kind) {
       for (let x = 0; x < W; x++) {
         const xm = (x / (W - 1) - 0.5) * wid;                              // écart latéral (m)
         const wide = Math.exp(-0.5 * Math.pow(xm / spread, 4));           // faisceau large, bords doux
-        const hot = 0.4 * Math.exp(-0.5 * Math.pow((d - 32) / 22, 2)) * Math.exp(-0.5 * Math.pow(xm / spot, 2));
-        const a = Math.min(1, rise * (fall * wide * 0.85 + hot));
-        const i = (y * W + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = a * 255;
+        const hot = 0.3 * Math.exp(-0.5 * Math.pow((d - 36) / 22, 2)) * Math.exp(-0.5 * Math.pow(xm / spot, 2));
+        const a = Math.min(1, rise * (fall * wide * 0.7 + hot));
+        // intensité codée dans la couleur (mélange multiplicatif) : 1 = sol deux fois plus éclairé
+        const i = (y * W + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = a * 255; img.data[i + 3] = 255;
       }
     }
     g.putImageData(img, 0, 0);
