@@ -438,7 +438,7 @@ function makeCarMesh(car, paintHex, opts = {}) {
   if (!MAT.haloTail) {
     const sm = (c, o) => new THREE.SpriteMaterial({ map: TEXS.radial, color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
     MAT.haloTail = sm(0xff1a30, 0.55); MAT.haloBrake = sm(0xff2038, 1); MAT.haloRev = sm(0xf4f6ff, 0.7); MAT.haloHead = sm(0xfff1d6, 0.9);
-    MAT.headPool = new THREE.MeshBasicMaterial({ map: beamTex('pool'), color: 0xfff0d8, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 });
+    MAT.headPool = new THREE.MeshBasicMaterial({ map: beamTex('pool'), color: 0xfff2dc, transparent: true, opacity: 0.46, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 });
     MAT.beamCone = new THREE.MeshBasicMaterial({ map: beamTex('cone'), color: 0xfff3e0, transparent: true, opacity: 0.08, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     MAT.revGlow = new THREE.MeshBasicMaterial({ map: TEXS.radial, color: 0xdfe6ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
   }
@@ -460,8 +460,10 @@ function makeCarMesh(car, paintHex, opts = {}) {
     }
   }
   // tache de lumière des phares sur la route, devant la voiture (toutes les voitures)
+  // (voiture du joueur : faisceau long qui épouse la route, voir player.js ; ici, version courte et rigide)
   const pool = new THREE.Mesh(glowGeo, MAT.headPool);
-  pool.scale.set(Math.max(8.5, Wd * 4.4), 1, 44); pool.position.set(0, 0.09, -L / 2 - 21.6); pool.visible = false; pool.renderOrder = 2; g.add(pool);
+  pool.scale.set(BEAM.wid * 0.6, 1, BEAM.len * 0.36); pool.position.set(0, 0.09, -L / 2 - BEAM.len * 0.18 + 0.3); pool.visible = false; pool.renderOrder = 2;
+  if (!opts.tailMat) g.add(pool);
   const lightState = { k: '' };
   const setLights = (night, brake, rev) => {
     const k = (night ? 1 : 0) + (brake ? 2 : 0) + (rev ? 4 : 0);
@@ -500,6 +502,8 @@ function makeCarMesh(car, paintHex, opts = {}) {
   return g;
 }
 let shadowGeo = null, glowGeo = null, blinkGeo = null, blurGeo = null;
+/* tache des feux de route sur la route : longueur et largeur (m) */
+const BEAM = { len: 110, wid: 26 };
 /* faisceaux des phares : cône ouvert (sommet sur le phare, s'ouvre vers l'avant) */
 let coneGeo = null;
 function beamConeGeo() {
@@ -514,27 +518,27 @@ function beamConeGeo() {
 /* textures des faisceaux : « pool » = tache sur la route (étroite près de la voiture, large et douce au loin),
    « cone » = dégradé le long du faisceau */
 function beamTex(kind) {
-  const c = document.createElement('canvas'), W = 128, H = 256; c.width = W; c.height = H;
+  const c = document.createElement('canvas'), W = 128, H = kind === 'cone' ? 256 : 512; c.width = W; c.height = H;
   const g = c.getContext('2d');
   if (kind === 'cone') {
     const gr = g.createLinearGradient(0, 0, 0, H);
     gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
   } else {
-    // haut du canevas = loin devant ; bas = pare-chocs
-    const img = g.createImageData(W, H);
+    // feux de route : tache calculée en mètres. Haut du canevas = loin devant (BEAM.len m), bas = pare-chocs.
+    // Intensité : forte devant, décroît doucement jusqu'à ~100 m ; largeur : le faisceau s'ouvre (~±18°)
+    // et éclaire aussi les bas-côtés ; point chaud au centre vers 25-45 m.
+    const img = g.createImageData(W, H), { len, wid } = BEAM;
     for (let y = 0; y < H; y++) {
-      const t = 1 - y / (H - 1);                     // 0 au pare-chocs, 1 au bout du faisceau
-      const half = 0.26 + 0.24 * Math.pow(t, 0.5);    // le faisceau s'élargit
-      const ss = (a, b, v) => { const k = Math.min(1, Math.max(0, (v - a) / (b - a))); return k * k * (3 - 2 * k); };
-      // monte juste devant le pare-chocs, reste fort sur la route devant, s'éteint au bout
-      const inten = (0.35 + 0.65 * ss(0.02, 0.22, t)) * (1 - ss(0.68, 1, t));
+      const d = (1 - y / (H - 1)) * len;                                   // distance devant le pare-chocs (m)
+      const rise = Math.min(1, d / 2.5);
+      const fall = 1 / (1 + Math.pow(d / 32, 2)) * (1 - Math.max(0, (d - len * 0.82) / (len * 0.18)));
+      const spread = 0.9 + d * 0.32, spot = 0.8 + d * 0.06;
       for (let x = 0; x < W; x++) {
-        const u = Math.abs(x / (W - 1) - 0.5);
-        const edge = Math.max(0, 1 - Math.pow(u / half, 3));
-        // deux lobes (phare gauche / droit) qui se rejoignent au loin
-        const lobes = 0.8 + 0.2 * Math.cos((x / (W - 1) - 0.5) * Math.PI * 4) * (1 - t);
-        const a = Math.max(0, Math.min(1, edge * inten * lobes));
+        const xm = (x / (W - 1) - 0.5) * wid;                              // écart latéral (m)
+        const wide = Math.exp(-0.5 * Math.pow(xm / spread, 4));           // faisceau large, bords doux
+        const hot = 0.4 * Math.exp(-0.5 * Math.pow((d - 32) / 22, 2)) * Math.exp(-0.5 * Math.pow(xm / spot, 2));
+        const a = Math.min(1, rise * (fall * wide * 0.85 + hot));
         const i = (y * W + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = a * 255;
       }
     }
