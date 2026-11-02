@@ -25,7 +25,7 @@ function envFor(map, tod) {
   const E = night ? {
     skyTop: '#04040a', skyMid: '#150d24', skyHor: '#3a1a36', fog: '#120d1d', fogNear: 40, fogFar: 540,
     hemiSky: '#46327a', hemiGround: '#08080e', hemiI: 0.75, sunColor: '#8a96ff', sunI: 0.35, sunDir: [-0.4, 0.8, 0.3],
-    headlight: 3.2, lamps: true, bloom: [0.8, 0.46], neonK: 1, poolK: 1, stars: true, sunDisc: false, moon: true,
+    headlight: 2.4, lamps: true, bloom: [0.8, 0.46], neonK: 1, poolK: 1, stars: true, sunDisc: false, moon: true,
     clouds: false, rain: false, windowsLit: true, vignette: 0.55, water: '#0a1828', skylineTint: '#ffffff'
   } : {
     skyTop: '#2a64b8', skyMid: '#74ace0', skyHor: '#d4e6f2', fog: '#c4d8e8', fogNear: 90, fogFar: 760,
@@ -35,7 +35,7 @@ function envFor(map, tod) {
   };
   if (map.id === 'ville') { E.stars = false; E.rain = night; if (!night) { E.fog = '#cdd3dc'; E.skyHor = '#dfe2e6'; E.fogFar = 620; } }
   if (map.id === 'plage') { if (night) { E.skyHor = '#2b2240'; E.fog = '#141428'; E.fogFar = 640; } else { E.fogFar = 950; E.fog = '#cfe3f0'; } }
-  if (map.id === 'campagne') { if (night) { E.lamps = false; E.skyHor = '#1b2236'; E.fog = '#0d1218'; E.hemiSky = '#3a4670'; E.hemiI = 0.6; E.headlight = 4; } else { E.fog = '#d3e0d0'; E.fogFar = 820; } }
+  if (map.id === 'campagne') { if (night) { E.lamps = false; E.skyHor = '#1b2236'; E.fog = '#0d1218'; E.hemiSky = '#3a4670'; E.hemiI = 0.6; E.headlight = 3; } else { E.fog = '#d3e0d0'; E.fogFar = 820; } }
   if (map.id === 'circuit') { if (night) { E.skyHor = '#1f2440'; E.fog = '#0e1020'; E.hemiI = 0.95; E.hemiSky = '#5a5c90'; E.fogFar = 640; } else { E.fogFar = 820; } }
   // couverture nuageuse de jour (plus haut = moins de nuages) ; voile léger la nuit en ville
   E.cloudCover = { ville: 0.5, plage: 0.58, campagne: 0.46, circuit: 0.52 }[map.id] || 0.5;

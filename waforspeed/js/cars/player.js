@@ -38,6 +38,8 @@ function buildBeam() {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
   beamMesh = new THREE.Mesh(g, MAT.headPool); beamMesh.frustumCulled = false; beamMesh.renderOrder = 2; beamMesh.visible = false;
+  // deuxième passage sur la même grille : la lumière multiplie le sol jusqu'à ~4× au cœur du faisceau
+  const twice = new THREE.Mesh(g, MAT.headPool); twice.frustumCulled = false; twice.renderOrder = 3; beamMesh.add(twice);
   scene.add(beamMesh);
 }
 const _bp = {};
@@ -46,6 +48,8 @@ function updateBeam(on, sP, latM, yaw) {
   if (!beamMesh) buildBeam();
   beamMesh.visible = on;
   if (!on) return;
+  // sans éclairage public (campagne), les phares sont la seule lumière : double passage ; en ville, un seul
+  beamMesh.children[0].visible = !(typeof ENV !== 'undefined' && ENV && ENV.lamps);
   const pos = beamMesh.geometry.attributes.position, a = pos.array, cy = Math.cos(yaw), sy = Math.sin(yaw), front = myCar.d.L / 2 - 0.3;
   for (let r = 0; r < BEAM_ROWS.length; r++) {
     const d = front + BEAM_ROWS[r];
