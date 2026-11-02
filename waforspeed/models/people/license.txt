@@ -1,0 +1,9 @@
+Piétons de WaForSpeed
+
+Personnages : « Universal Base Characters » par Quaternius (https://quaternius.com) — licence CC0 1.0 (domaine public).
+Animations : « Universal Animation Library » par Quaternius (https://quaternius.com) — licence CC0 1.0 (domaine public).
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Modifications pour WaForSpeed : maillages assemblés (1 maillage skinné + 1 matériau par personnage),
+coiffures sélectionnables, animations regroupées dans animations.json, fichiers glTF JSON autonomes.
+Le crédit n'est pas obligatoire (CC0) mais il est donné ici par respect pour l'auteur.

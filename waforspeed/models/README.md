@@ -60,3 +60,7 @@ puis, dans `js/cars/catalog.js`, mets son chemin dans `file` et remplis `credit`
 
 Vérifie que la licence du modèle autorise son usage dans un jeu. Pour une licence **CC-BY**, il faut citer l'auteur : écris-le dans `credit` (par exemple `'Golf 8 par NomAuteur, CC-BY 4.0'`), il s'affiche dans le garage.
 Les noms et logos des marques sont des marques déposées : pour un jeu privé entre amis ce n'est pas un problème, pour un jeu public mieux vaut les retirer.
+
+## Piétons
+
+`people/` : « Universal Base Characters » et « Universal Animation Library » par Quaternius, CC0 1.0 (voir `people/license.txt`).

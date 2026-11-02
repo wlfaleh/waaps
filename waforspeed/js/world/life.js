@@ -8,7 +8,7 @@
 const PEOPLE = [];   // { s: segment (flottant), lat: m (signé), pose: 0 marche 1 assis 2 allongé 3 debout, dir, v, yaw, colors, ph }
 const PEOPLE_MAX = 220;
 /* les silhouettes géométriques ne font pas assez réel : piétons masqués tant que de vrais modèles animés ne sont pas intégrés */
-let PEOPLE_ON = false;
+let PEOPLE_ON = true;   // vrais personnages animés (people.js) ; jamais de silhouettes géométriques
 const _C = (arr) => (THREE ? arr.map((h) => new THREE.Color(h)) : []);
 const SKINS = _C(['#f1c7a5', '#e0ac85', '#c68a62', '#8d5a3b', '#5c3a26', '#f6d6bd']);
 const SHIRTS = _C(['#e8e8e8', '#1d3f8f', '#b3122b', '#2f6f4f', '#f2c14e', '#111216', '#7a4fa0', '#ff8a3d', '#5aa7d6', '#d9d0c0', '#c94f7c', '#3b3f48']);
@@ -110,7 +110,9 @@ function setupPeople() {
 const _pm = THREE && new THREE.Matrix4(), _pq = THREE && new THREE.Quaternion(), _pe = THREE && new THREE.Euler(0, 0, 0, 'YXZ'), _pp = THREE && new THREE.Vector3(), _ps = THREE && new THREE.Vector3(1, 1, 1), _ptp = {};
 /* chaque image : on avance les marcheurs et on affiche ceux qui sont près du joueur */
 function updatePeople(dt, sP) {
-  if (!segments.length || !PEOPLE_ON) { if (peopleMesh) peopleMesh.visible = false; return; }
+  if (segments.length && PEOPLE_ON && typeof updatePeopleReal === 'function') return updatePeopleReal(dt, sP);
+  if (peopleMesh) peopleMesh.visible = false;
+  return;
   setupPeople();
   peopleU.uTime.value += dt;
   const len = segments.length, aP = sP / SEG, aMod = ((aP % len) + len) % len;
