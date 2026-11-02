@@ -496,7 +496,7 @@ function buildChunk(ci, lod = 0) {
   const a0 = ci * CH, a1 = a0 + CH;
   const road = newBuf(), side = newBuf(), bld = newBuf(), neon = newBuf(), pool = newBuf(), walk = newBuf();
   const group = new THREE.Group();
-  const ctx = { side, bld, neon, pool, group, rotors: [] };
+  const ctx = { side, bld, neon, pool, group, rotors: [], lod };
   curZone = zoneAt(a0);   // tout le tronçon est dans la même zone (zones alignées sur les tronçons)
   const profiles = { '-1': GROUND[MAP.ground](-1, curZone), '1': GROUND[MAP.ground](1, curZone) };
   for (let a = a0; a < a1; a++) {

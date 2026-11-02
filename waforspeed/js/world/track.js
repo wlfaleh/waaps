@@ -34,7 +34,9 @@ function buildTrack() {
   addRoad(50, 50, 80, 0, -lastY() / SEG);
   addRoad(20, 30, 20, 0, 0);
   trackLength = segments.length * SEG;
+  if (typeof PEOPLE !== 'undefined') PEOPLE.length = 0;
   generateDecor(map);
+  if (typeof populatePeople === 'function') populatePeople(map);
 }
 const segAt = (a) => segments[((a % segments.length) + segments.length) % segments.length];
 const findSegment = (z) => segments[Math.floor(z / SEG) % segments.length];

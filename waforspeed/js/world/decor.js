@@ -41,6 +41,18 @@ function generateDecor(map) {
   for (let i = 0; i < ranges.length - 1; i++) ranges[i][1] = ranges[i + 1][0];
   const free = (n) => !segments[((n % len) + len) % len].deco.lamp;
   const parked = (z0, z1, side, lat) => { for (let n = z0 + 6; n < z1 - 6; n += 5 + Math.floor(D() * 4)) if (D() < 0.55 && free(n)) item(n, { t: 'parked', side, lat, col: Math.floor(D() * 8), kind: D() < 0.3 ? 1 : 0 }); };
+  // vie sur la plage : paillotes, serviettes avec baigneurs allongés, gens debout dans l'eau, bord de mer
+  const beachLife = (z0, z1, k = 1) => {
+    for (let n = z0 + 30 + Math.floor(D() * 40); n < z1 - 10; n += 120 + Math.floor(D() * 80)) item(n, { t: 'beachbar', side: 1, lat: RW + 20 + D() * 6 });
+    for (let n = z0 + 2; n < z1; n += 4 + Math.floor(D() * 5)) if (D() < 0.7 * k) {
+      const lat = RW + 10 + D() * 26, rot = (D() - 0.5) * 0.6;
+      item(n, { t: 'towel', side: 1, lat, rot, col: Math.floor(D() * 6) });
+      addPerson(n, lat, D() < 0.75 ? 2 : 3, { swim: true, yaw: rot, y: 0.02 + sandHeight(lat) });
+    }
+    for (let n = z0 + 4; n < z1; n += 5 + Math.floor(D() * 8)) if (D() < 0.6 * k) addPerson(n + D() * 3, RW + 47 + D() * 12, 3, { swim: true, y: -2.25, yaw: D() * 6 });
+    for (let n = z0; n < z1; n += 2) item(n, { t: 'shore' });
+  };
+  const sandHeight = (lat) => { const pr = GROUND.beach(1, 'corniche'); for (const st of pr) if (lat >= st.a && lat <= st.b) return lerp(st.ya, st.yb, (lat - st.a) / (st.b - st.a)); return -1.9; };
   const city = {
     centre(z0, z1) {
       for (const side of [-1, 1]) for (let n = z0 + (side < 0 ? 0 : 5); n < z1 - 11; n += 11) {
@@ -48,6 +60,7 @@ function generateDecor(map) {
         const tall = D();
         item(n, { t: 'bld', side, len: 11 * SEG_M - 0.6 - D() * 2, d: 10 + D() * 14, h: tall < 0.2 ? 60 + D() * 45 : tall < 0.7 ? 26 + D() * 30 : 12 + D() * 14,
           tint: Math.floor(D() * 4), u0: Math.floor(D() * 16) / 16, v0: Math.floor(D() * 16) / 16, neon: D() < 0.45 ? (D() < 0.5 ? '#00E5FF' : '#FF6A00') : null, sign: D() < 0.35 });
+        if (D() < 0.5) placeShop(item, n, side, 11 * SEG_M - 2.5, [0, 1, 2, 3, 5, 7, 8][Math.floor(D() * 7)], D);
       }
       for (let n = z0 + 12; n < z1; n += 24) lamp(n, (n / 24 | 0) % 2 ? 1 : -1, 'city');
       for (let n = z0 + 40; n < z1; n += 150) item(n, { t: 'zebra' });
@@ -59,6 +72,7 @@ function generateDecor(map) {
       for (const side of [-1, 1]) for (let n = z0 + (side < 0 ? 2 : 7); n < z1 - 9; n += 9) {
         if (D() < 0.08) continue;
         item(n, { t: 'bld', side, len: 9 * SEG_M - 0.4 - D() * 1.5, d: 9 + D() * 6, h: 11 + D() * 12, tint: 2 + Math.floor(D() * 2), u0: Math.floor(D() * 16) / 16, v0: Math.floor(D() * 16) / 16, neon: null, sign: false, balcony: true });
+        if (D() < 0.4) placeShop(item, n, side, 9 * SEG_M - 2, [0, 1, 3, 4, 5, 6, 8][Math.floor(D() * 7)], D);
       }
       for (let n = z0 + 12; n < z1; n += 26) lamp(n, (n / 26 | 0) % 2 ? 1 : -1, 'city');
       for (const side of [-1, 1]) for (let n = z0 + (side < 0 ? 3 : 8); n < z1; n += 10) if (free(n) && free(n + 1) && D() > 0.1) { item(n, { t: 'streettree', side, lat: RW + 3.6, h: 6 + D() * 3 }); collide(n, side * (RW + 3.6), 0.08); }
@@ -69,6 +83,7 @@ function generateDecor(map) {
     parc(z0, z1) {
       // un côté : parc (pelouse, arbres, bancs, grille) ; l'autre : immeubles moyens
       const ps = D() < 0.5 ? -1 : 1;
+      for (let n = z0; n < z1; n++) segments[n].parkSide = ps;
       for (let n = z0; n < z1; n += 4) item(n, { t: 'railing', side: ps, lat: RW + 6 });
       for (let n = z0 + 2; n < z1; n += 3 + Math.floor(D() * 3)) item(n, { t: 'tree', side: ps, lat: RW + 9 + D() * 45, h: 7 + D() * 8, kind: D() < 0.25 ? 'pine' : 'round', along: (D() - 0.5) * 3 });
       for (let n = z0 + 8; n < z1; n += 22) item(n, { t: 'bench', side: ps, lat: RW + 4.2 });
@@ -93,6 +108,7 @@ function generateDecor(map) {
       for (let n = z0 + 6; n < z1; n += 9 + Math.floor(D() * 4)) { item(n, { t: 'palm', side: 1, lat: RW + 3.2, h: 7 + D() * 4, lean: (D() - 0.5) * 0.5, rot: D() * 6 }); collide(n, RW + 3.2, 0.1); }
       for (let n = z0 + 3; n < z1; n += 7 + Math.floor(D() * 6)) item(n, { t: 'umbrella', side: 1, lat: RW + 12 + D() * 20, col: Math.floor(D() * 5), along: (D() - 0.5) * 4 });
       for (let n = z0 + 40; n < z1; n += 160 + Math.floor(D() * 80)) item(n, { t: 'tower', side: 1, lat: RW + 22 });
+      beachLife(z0, z1);
       for (let n = z0 + 2; n < z1 - 12; n += 12 + Math.floor(D() * 10)) if (D() > 0.25) item(n, { t: 'villa', side: -1, lat: RW + 12 + D() * 6, w: 8 + D() * 6, d: 8 + D() * 5, h: 4 + D() * 5, roof: Math.floor(D() * 3), floors: D() < 0.4 ? 2 : 1 });
       for (let n = z0 + 9; n < z1; n += 14 + Math.floor(D() * 8)) item(n, { t: 'palm', side: -1, lat: RW + 5 + D() * 3, h: 6 + D() * 4, lean: (D() - 0.5) * 0.4, rot: D() * 6 });
       for (let n = z0 + 15; n < z1; n += 30) lamp(n, 1, 'beach');
@@ -102,7 +118,11 @@ function generateDecor(map) {
       // quai, bateaux amarrés côté mer, cafés colorés côté terre
       for (let n = z0 + 2; n < z1; n += 3) item(n, { t: 'bollard', side: 1, lat: RW + 6.5 });
       for (let n = z0 + 4; n < z1 - 6; n += 6 + Math.floor(D() * 4)) item(n, { t: 'boat', side: 1, lat: RW + 13 + D() * 18, l: 7 + D() * 7, sail: D() < 0.6, col: Math.floor(D() * 4), rot: (D() - 0.5) * 0.5 });
-      for (let n = z0 + 2; n < z1 - 8; n += 8 + Math.floor(D() * 4)) item(n, { t: 'villa', side: -1, lat: RW + 6 + D() * 2, w: 7 + D() * 3, d: 8 + D() * 3, h: 6 + D() * 5, roof: Math.floor(D() * 3), floors: 2, col: Math.floor(D() * 6) });
+      for (let n = z0 + 2; n < z1 - 8; n += 8 + Math.floor(D() * 4)) {
+        const w = 7 + D() * 3;
+        item(n, { t: 'villa', side: -1, lat: RW + 7, w, d: 8 + D() * 3, h: 6 + D() * 5, roof: Math.floor(D() * 3), floors: 2, col: Math.floor(D() * 6) });
+        if (D() < 0.6) placeShop(item, n - Math.round(w / 2 / SEG_M), -1, w - 0.6, [0, 1, 2, 3, 6, 7][Math.floor(D() * 6)], D, { face: RW + 7, tLat: RW + 4.6, y0: 0.05 });
+      }
       for (let n = z0 + 15; n < z1; n += 28) lamp(n, 1, 'beach');
     },
     rochers(z0, z1) {
@@ -120,6 +140,7 @@ function generateDecor(map) {
       for (let n = z0 + 4; n < z1; n += 11 + Math.floor(D() * 6)) item(n, { t: 'boat', side: 1, lat: RW + 30 + D() * 10, l: 5 + D() * 3, sail: false, col: Math.floor(D() * 4), rot: 1.2 + D() });
       for (let n = z0 + 12; n < z1; n += 26) lamp(n, -1, 'beach');
       parked(z0, z1, -1, RW + 1.5);
+      beachLife(z0, z1, 0.6);
     }
   };
   const country = {
@@ -170,6 +191,7 @@ function generateDecor(map) {
     paddock(z0, z1) {
       // stands des équipes (garages), drapeaux, mur des stands
       const side = D() < 0.5 ? -1 : 1;
+      for (let n = z0; n < z1; n++) segments[n].pitSide = side;
       for (let n = z0; n < z1; n += 3) item(n, { t: 'pitwall', side, lat: RW + 1.4 });
       for (let n = z0 + 2; n < z1 - 14; n += 14) item(n, { t: 'garage', side, lat: RW + 16, l: 14 * SEG_M - 0.5, col: Math.floor(D() * 6) });
       for (let n = z0; n < z1; n += 4) item(n, { t: 'tires', side: -side, lat: RW + 5.6 });
