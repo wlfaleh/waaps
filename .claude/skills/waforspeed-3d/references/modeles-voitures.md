@@ -77,3 +77,11 @@ Captures garage (avant, profil, arrière) + course vue de derrière ; `realBody(
 ## Créer un modèle soi-même (Blender, si installé)
 Blender en ligne de commande (`blender -b -P script.py`) : modéliser par `bpy`/`bmesh` (boîte → biseaux → subdivision), UV automatiques (`smart_project`), un matériau par zone (carrosserie nommée `carpaint`, `glass`, `tire`, `rim`, `tail_light`, `head_light`), une roue = un objet nommé `Wheel_FL`…, export `bpy.ops.export_scene.gltf(export_format='GLB')`, avant de la voiture vers +Y dans Blender (l’export glTF le place vers −Z, le sens du jeu ; sinon `rotateY: 180`). Puis étapes 3 à 7.
 Règles de modélisation « hard surface » : quads, arêtes de soutien sur les bords vifs, pas de n-gones sur les surfaces courbes, normales vers l'extérieur, échelle 1 unité = 1 m.
+
+## 8. Version « trafic » (LOD) — obligatoire pour chaque nouvelle voiture
+Depuis le dossier qui contient node_modules (three 0.128, @gltf-transform, meshoptimizer, sharp) :
+`node .claude/skills/waforspeed-3d/scripts/make-lod.mjs <chemin>/waforspeed [id ...]`
+→ écrit `<dossier>/<nom>-lod.json` (≈12 000 triangles, intérieur retiré, textures cuites en couleurs de sommet,
+pièces regroupées par rôle, roues nommées, silhouette lointaine `wfs_far`). Le jeu le charge seul pour le trafic
+(proche < 50 m : LOD avec roues et feux ; loin : silhouette en 1 maillage). Rien à déclarer dans le catalogue.
+Si la simplification échoue (ex. Opel Corsa ≈26 000 triangles), le fichier reste utilisable.

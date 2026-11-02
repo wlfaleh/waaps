@@ -27,10 +27,15 @@ function setGantry(label, col, sAbs) {
 }
 
 /* --- trafic & rivaux en 3D --- */
-const LOD_CAR_M = 70;   // au-delà, voiture simplifiée en une seule pièce (1 appel de dessin)
+/* Deux niveaux de détail :
+   - proche (< LOD_CAR_M) : version « trafic » du vrai modèle (≈12 000 triangles, ≈10 appels de dessin),
+     roues qui tournent et braquent, clignotants, feux ;
+   - loin : silhouette du même modèle en 1 maillage (≈1 800 triangles, 1 appel), sinon makeCarLow (repli).
+   Géométries et matériaux partagés entre toutes les voitures du même modèle (clone(true), caches). */
+const LOD_CAR_M = 50;   // au-delà : silhouette légère (coût maîtrisé)
 function trafficMesh(car, far) {
   if (far) {
-    if (!car.lowMesh) { car.lowMesh = makeCarLow(CARS[car.type], TRAFFIC_PAINTS[car.color]); scene.add(car.lowMesh); }
+    if (!car.lowMesh) { const spec = CARS[car.type], hex = TRAFFIC_PAINTS[car.color]; car.lowMesh = makeCarFar(spec, hex) || makeCarLow(spec, hex); scene.add(car.lowMesh); }
     if (car.mesh) car.mesh.visible = false;
     return car.lowMesh;
   }
@@ -219,7 +224,8 @@ function render3D(dt, t) {
   // feux : arrière allumés la nuit, stop au freinage, feux de recul blancs en marche arrière
   playerMesh.userData.setLights(TOD === 'nuit', braking, reversing || speed < -1);
   for (const fl of flames) { fl.visible = nitroOn; if (nitroOn) { const k = 0.7 + Math.random() * 0.6; fl.scale.set(1, 1, k); } }
-  // trafic
+  // trafic (feux de la silhouette lointaine allumés la nuit)
+  farLampU.value = TOD === 'nuit' ? 2.2 : 0;
   for (const car of cars) {
     const rel = relZ(car.z - position);
     if (rel < -20 / M || rel > (VIEW * SEG_M + 30) / M) { if (car.mesh) car.mesh.visible = false; if (car.lowMesh) car.lowMesh.visible = false; continue; }
