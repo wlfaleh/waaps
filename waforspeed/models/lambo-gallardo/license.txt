@@ -1,0 +1,9 @@
+Model Information:
+* title:	2009 Lamborghini Gallardo LP560-4 Spyder
+* source:	https://sketchfab.com/3d-models/2009-lamborghini-gallardo-lp560-4-spyder-73e19a0eb9364e18837e59a4970a93a4
+* author:	Ddiaz Design (https://sketchfab.com/ddiaz-design)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+Modifications for WaForSpeed: geometry simplified where needed (meshoptimizer, at most about 120 000 triangles), textures converted to WebP 1024 px, glass transmission replaced by simple transparency, everything embedded in a single glTF JSON file. The body colour is changed in game.

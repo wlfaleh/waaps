@@ -1,0 +1,13 @@
+Model Information:
+* title:	Land Rover Range Rover Sport - 2023
+* source:	https://sketchfab.com/3d-models/land-rover-range-rover-sport-2023-640826210d2a4be9ae6e638fec1e84fa
+* author:	Unn Interativa (https://sketchfab.com/unninterativa)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Land Rover Range Rover Sport - 2023" (https://sketchfab.com/3d-models/land-rover-range-rover-sport-2023-640826210d2a4be9ae6e638fec1e84fa) by Unn Interativa (https://sketchfab.com/unninterativa) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+Modifications for WaForSpeed: geometry simplified where needed (meshoptimizer, at most about 120 000 triangles), textures converted to WebP 1024 px, glass transmission replaced by simple transparency, everything embedded in a single glTF JSON file. The body colour is changed in game.

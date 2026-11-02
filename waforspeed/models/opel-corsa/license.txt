@@ -1,0 +1,16 @@
+Model Information:
+* title:	Opel Corsa 2020
+* source:	https://sketchfab.com/3d-models/opel-corsa-2020-d96f09893a344557a40551ef68d79d9b
+* author:	Nieve5677 (https://sketchfab.com/niev)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Opel Corsa 2020" (https://sketchfab.com/3d-models/opel-corsa-2020-d96f09893a344557a40551ef68d79d9b) by Nieve5677 (https://sketchfab.com/niev) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+(Licence et crédit repris de CREDITS.md du dépôt github.com/Davencode/syncuro-models, d'où vient la version utilisée,
+déjà corrigée et allégée par ce dépôt ; ces informations figurent aussi dans asset.extras du fichier.)
+
+Modifications for WaForSpeed: geometry simplified where needed (meshoptimizer, at most about 120 000 triangles), textures converted to WebP 1024 px, glass transmission replaced by simple transparency, everything embedded in a single glTF JSON file. The body colour is changed in game.
