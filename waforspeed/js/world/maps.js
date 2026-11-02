@@ -40,6 +40,16 @@ function envFor(map, tod) {
   // couverture nuageuse de jour (plus haut = moins de nuages) ; voile léger la nuit en ville
   E.cloudCover = { ville: 0.5, plage: 0.58, campagne: 0.46, circuit: 0.52 }[map.id] || 0.5;
   if (night && map.id === 'ville') { E.nightClouds = 0.35; E.cloudCover = 0.52; }
+  // étalonnage (passe finale, qualité haute) : exposition, blanc, contraste, saturation, teinte des ombres / hautes lumières
+  E.grade = night
+    ? { exposure: 0.9, white: 1.4, contrast: 1.0, sat: 1.1, lift: [0.004, 0.006, 0.018], gain: [1, 0.99, 1.03] }
+    : { exposure: 0.72, white: 1.65, contrast: 1.0, sat: 1.06, lift: [0.003, 0.006, 0.014], gain: [1.03, 1.01, 0.97] };
+  // éclairage d'environnement (ciel filtré) : sol / trottoirs, vitres des façades ; éclat du soleil
+  E.envK = night ? 0.4 : 0.22; E.glassK = 0.7; E.flare = night ? 0 : 0.8;
+  E.envGround = night ? '#0a0a10' : '#4a4a42';
+  if (map.id === 'campagne' && !night) E.envGround = '#3f4a2c';
+  if (map.id === 'plage' && !night) { E.envGround = '#8a8068'; E.grade.sat = 1.08; }
+  if (map.id === 'ville' && night) { E.grade.lift = [0.006, 0.006, 0.022]; E.grade.sat = 1.12; }
   if (quality !== 'high') E.fogFar = Math.min(E.fogFar, 420);
   return E;
 }

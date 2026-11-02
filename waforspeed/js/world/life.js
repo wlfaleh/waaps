@@ -1,5 +1,5 @@
 /* WaForSpeed — Vie dans les rues : piétons animés, cafés / restaurants / bars avec terrasses,
-   plages (paillotes, serviettes, baigneurs, écume) et arbres plus réalistes.
+   plages (paillotes, serviettes, baigneurs, écume) et végétation réaliste (arbres, haies, herbe).
    Principes (skill waforspeed-3d) : un seul InstancedMesh pour tous les piétons (1 appel de dessin),
    animation de la marche dans le shader (aucun calcul par os sur le processeur), décor fusionné par tronçon. */
 'use strict';
@@ -247,82 +247,503 @@ DECOR.shore = function (ctx, it, p, a) {
   for (const l of [52, 61]) quad(ctx.side, lateral(p, RW + l, y + 0.01), lateral(p1, RW + l, y + 0.01), lateral(p1, RW + l + 0.5, y + 0.01), lateral(p, RW + l + 0.5, y + 0.01), hex3('#bfe9ee'), null, [0, 1, 0]);
 };
 
-/* ================= Arbres plus réalistes ================= */
-/* ajoute une géométrie avec un ombrage par sommet : dessous plus sombre (occlusion), dessus plus clair, variations de teinte */
-function addGeoShaded(B, geo, pos, yaw, col, scale, rnd, pitch = 0, roll = 0) {
-  const n0 = B.c.length;
-  addGeo(B, geo, pos, yaw, col, scale, pitch, roll);
-  for (let i = n0, v = n0 / 3; i < B.c.length; i += 3, v++) {
-    const ny = B.n[v * 3 + 1], k = (0.68 + 0.42 * Math.max(0, ny) - 0.12 * Math.max(0, -ny)) * (0.92 + rnd() * 0.16);
-    B.c[i] *= k; B.c[i + 1] *= k * (0.97 + rnd() * 0.06); B.c[i + 2] *= k;
+/* ================= Végétation réaliste ================= */
+/* Arbres faits comme dans les jeux actuels : tronc et vraies branches (géométrie, buffer « side »),
+   feuillage en cartes de feuilles alpha-testées (buffer « leaf », 1 seul matériau partagé, 1 appel de dessin par tronçon).
+   - texture de feuillage dessinée en canvas (atlas 1024² en 4 cases) : feuillus, rameau de sapin, palme, éventail d'aiguilles / herbe ;
+     mipmaps faits à la main qui conservent la couverture (le feuillage ne s'éclaircit pas au loin) ;
+   - normales orientées vers l'extérieur du houppier, éclairage Lambert par sommet (doux, peu coûteux), même lumière sur les deux faces ;
+   - ombres portées avec un matériau de profondeur alpha-testé (customDepthMaterial), léger vent dans le shader ;
+   - niveau de détail : ctx.lod = 1 au-delà de LOD_FAR_M → 3 à 5 fois moins de cartes et de facettes.
+   Espèces : platane d'alignement (ville), tilleul / chêne (parcs, campagne), sapins (forêt), pins sylvestres (bois de pins, parcs),
+   pins parasols et chênes verts (bord de mer), palmiers, cyprès (vignobles), haies, fougères et touffes d'herbe. */
+const VEG_TS = 512, VEG_AS = 1024;   // taille d'une case, taille de l'atlas
+let FOL = null;
+/* ---- petits outils vectoriels (génération seulement, jamais dans la boucle de rendu) ---- */
+const vAdd = (a, b, k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+const vMul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+const vNorm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const vCross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const vDot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const vCol = (c, k, R) => { const j = R ? 0.92 + R() * 0.16 : 1; return [c[0] * k * j, c[1] * k * (R ? 0.95 + R() * 0.1 : 1) * j, c[2] * k * j]; };
+const vRandUnit = (R) => { const z = R() * 2 - 1, t = R() * 6.283, s = Math.sqrt(1 - z * z); return [s * Math.cos(t), z, s * Math.sin(t)]; };
+/* repère d'une carte de normale n, tournée de spin autour de n (V reste proche de la verticale) */
+function vBasis(n, spin) {
+  const t = Math.abs(n[1]) < 0.96 ? [0, 1, 0] : [1, 0, 0];
+  const U = vNorm(vCross(t, n)), V = vCross(n, U), c = Math.cos(spin), s = Math.sin(spin);
+  return [vAdd(vMul(U, c), V, s), vAdd(vMul(V, c), U, -s)];
+}
+
+/* ---- atlas de feuillage dessiné en canvas ---- */
+function vegDrawLeaves(g, ox, oy, R) {
+  const cx = ox + 256, cy = oy + 262;
+  g.lineCap = 'round';
+  // brindilles qui partent du bas de la case
+  g.strokeStyle = '#3d3024';
+  for (let k = 0; k < 9; k++) {
+    const a = -Math.PI / 2 + (R() - 0.5) * 2.4, l = 120 + R() * 110;
+    g.lineWidth = 2 + R() * 2.5; g.beginPath(); g.moveTo(ox + 256 + (R() - 0.5) * 30, oy + 420);
+    g.quadraticCurveTo(cx + Math.cos(a) * l * 0.4, cy + 60 + Math.sin(a) * l * 0.4, cx + Math.cos(a) * l, cy + 40 + Math.sin(a) * l); g.stroke();
+  }
+  // feuilles : les plus sombres d'abord (intérieur à l'ombre), les claires par-dessus
+  const L = [];
+  for (let i = 0; i < 520; i++) {
+    const th = R() * 6.283, edge = 0.74 + 0.26 * Math.sin(th * 5 + 1.3) * Math.sin(th * 3 + 0.4), rr = Math.pow(R(), 0.6) * 196 * edge;
+    L.push({ x: cx + Math.cos(th) * rr, y: cy + Math.sin(th) * rr * 0.94, rot: th + (R() - 0.5) * 1.9, len: 20 + R() * 17, w: 0.38 + R() * 0.16, sh: R() * 0.55 + (rr / 196) * 0.45 });
+  }
+  L.sort((a, b) => a.sh - b.sh);
+  for (const f of L) {
+    const hue = 82 + R() * 34, sat = 38 + R() * 22, lum = 14 + f.sh * 30 + R() * 6;
+    g.save(); g.translate(f.x, f.y); g.rotate(f.rot);
+    g.fillStyle = `hsl(${hue},${sat}%,${lum}%)`;
+    g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(f.len * 0.45, -f.len * f.w, f.len, 0); g.quadraticCurveTo(f.len * 0.45, f.len * f.w, 0, 0); g.fill();
+    g.strokeStyle = `hsla(${hue - 10},${sat}%,${lum + 14}%,0.55)`; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(1, 0); g.lineTo(f.len * 0.85, 0); g.stroke();
+    g.restore();
   }
 }
-const LEAVES = ['#2f4a22', '#3a5a28', '#456a2e', '#2a4220', '#53723a'].map(hex3);
-const NEEDLES = ['#24391f', '#2b4425', '#1f3320'].map(hex3);
-/* touffe de feuillage : sphère bosselée (bruit déterministe sur la position → pas de trous), normales lisses */
-let foliageGeo = null, foliageLow = null, pineGeo = null;
-function makeFoliage(detail) {
-  const g = new THREE.IcosahedronGeometry(1, detail), pos = g.attributes.position, nor = new Float32Array(pos.count * 3), v = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i).normalize();
-    const k = 1 + 0.16 * Math.sin(v.x * 5.1 + 1.3) * Math.sin(v.y * 4.3 + 0.7) * Math.sin(v.z * 5.7 + 2.1) + 0.08 * Math.sin(v.x * 11 + v.z * 9);
-    pos.setXYZ(i, v.x * k, v.y * k * 0.92, v.z * k); nor[i * 3] = v.x; nor[i * 3 + 1] = v.y; nor[i * 3 + 2] = v.z;
-  }
-  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  return g;
-}
-function pineTier() {
-  // étage de sapin : cône à bord dentelé (branches) légèrement retombant
-  const g = new THREE.ConeGeometry(1, 1, 14, 2), pos = g.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), a = Math.atan2(z, x), r = Math.hypot(x, z);
-    const k = 1 + 0.18 * Math.sin(a * 7) * (r > 0.5 ? 1 : 0);
-    pos.setXYZ(i, x * k, y - (r > 0.9 ? 0.08 : 0), z * k);
-  }
-  g.translate(0, 0.5, 0); g.computeVertexNormals();
-  return g;
-}
-const _oldTree = DECOR.tree;
-DECOR.tree = function (ctx, it, p, a) {
-  if (it.kind === 'cypress') return _oldTree(ctx, it, p, a);
-  const P = prims(), [, f] = axes(p.th), b0 = lateral(p, it.side * it.lat, 0);
-  const b = [b0[0] + f[0] * (it.along || 0), p.y + groundY(it.side, it.lat) - 0.1, b0[2] + f[2] * (it.along || 0)];
-  const R = mulberry32(((it.h * 1000) | 0) + a * 7 + (it.side > 0 ? 3 : 0)), h = it.h, low = ctx.lod;
-  if (it.kind === 'pine') {
-    // sapin : tronc fin, 5 à 7 étages de branches qui rétrécissent, légère irrégularité
-    addGeo(ctx.side, P.cyl, b, 0, C.trunk, [0.18 + h * 0.008, h * 0.35, 0.18 + h * 0.008]);
-    const tiers = low ? 2 : 5 + (R() * 2 | 0);
-    for (let k = 0; k < tiers; k++) {
-      const t = k / tiers, rad = h * (0.3 - t * 0.22), y = h * (0.18 + t * 0.66);
-      if (!pineGeo) pineGeo = pineTier();
-      addGeoShaded(ctx.side, pineGeo, [b[0] + (R() - 0.5) * 0.2, b[1] + y, b[2] + (R() - 0.5) * 0.2], R() * 6, NEEDLES[k % 3], [rad, h * 0.3, rad], R);
+function vegDrawSpray(g, ox, oy, R) {
+  // rameau de sapin : tige de gauche (tronc) à droite (pointe), rameaux latéraux couverts d'aiguilles
+  const y0 = oy + 256, x0 = ox + 6, x1 = ox + 500;
+  const stem = (t) => [x0 + (x1 - x0) * t, y0 + Math.sin(t * 3.1) * 10];
+  const cols = ['#152a1c', '#1b3322', '#21402a', '#2a4b2e', '#36603a', '#4c7a3e'];
+  let bucket = cols.map(() => []);
+  // les aiguilles sont regroupées par couleur et tracées en un seul chemin (des milliers de traits : beaucoup plus rapide)
+  const flush = () => { cols.forEach((c, i) => { const a = bucket[i]; if (!a.length) return; g.strokeStyle = c; g.beginPath(); for (let k = 0; k < a.length; k += 4) { g.moveTo(a[k], a[k + 1]); g.lineTo(a[k + 2], a[k + 3]); } g.stroke(); }); bucket = cols.map(() => []); };
+  const needles = (ax, ay, bx, by, len, tipK) => {
+    const dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l, steps = Math.floor(l / 3.2);
+    for (let k = 0; k <= steps; k++) {
+      const t = k / steps, px = ax + dx * t, py = ay + dy * t, nl = len * (0.75 + R() * 0.4) * (1 - t * 0.35);
+      for (const sd of [-1, 1]) {
+        const a = (0.75 + R() * 0.45) * sd, c = Math.cos(a), s = Math.sin(a);
+        const nx = ux * c - uy * s, ny = ux * s + uy * c;
+        bucket[Math.min(5, Math.floor(R() * 3.2 + t * tipK * 3))].push(px, py, px + nx * nl, py + ny * nl);
+      }
     }
-    return;
+  };
+  g.lineCap = 'round';
+  for (let i = 0; i < 26; i++) {
+    const t = 0.04 + i / 26 * 0.92, [sx, sy] = stem(t), lt = (1 - t * 0.72) * (150 + R() * 40);
+    for (const sd of [-1, 1]) {
+      const a = sd * (0.85 + R() * 0.25), ex = sx + Math.cos(a) * lt * 0.75, ey = sy + Math.sin(a) * lt;
+      g.strokeStyle = '#3a2c1e'; g.lineWidth = 2; g.beginPath(); g.moveTo(sx, sy); g.lineTo(ex, Math.max(oy + 14, Math.min(oy + 498, ey))); g.stroke();
+      needles(sx, sy, ex, Math.max(oy + 30, Math.min(oy + 482, ey)), 17, 1);
+    }
+    g.lineWidth = 2.2; flush();
   }
-  // feuillu : tronc qui s'affine, 2 à 3 branches, houppier fait de plusieurs touffes
-  addGeo(ctx.side, P.cyl, b, 0, C.trunk, [0.2 + h * 0.012, h * 0.55, 0.2 + h * 0.012]);
-  if (!low) for (let k = 0; k < 3; k++) {
-    const ang = R() * 6.28;
-    addGeo(ctx.side, P.cyl, [b[0], b[1] + h * 0.42, b[2]], ang, C.trunk, [0.07 + h * 0.006, h * 0.3, 0.07 + h * 0.006], 0.7, 0);
+  g.strokeStyle = '#4a3624'; g.lineWidth = 6; g.beginPath(); g.moveTo(x0, y0);
+  for (let t = 0; t <= 1; t += 0.05) { const [sx, sy] = stem(t); g.lineTo(sx, sy); g.lineWidth = 6 - t * 4; }
+  g.stroke();
+  for (let t = 0; t < 1; t += 0.04) { const [ax, ay] = stem(t), [bx, by] = stem(t + 0.04); needles(ax, ay, bx, by, 19, 1.2); }
+  g.lineWidth = 2.4; flush();
+}
+function vegDrawFrond(g, ox, oy, R) {
+  // palme : rachis du bas (base) vers le haut (pointe), folioles de part et d'autre
+  const bx = ox + 256, by = oy + 506, ty = oy + 8;
+  const rach = (t) => [bx + Math.sin(t * 2.2) * 8, by + (ty - by) * t];
+  g.lineCap = 'round';
+  for (let i = 0; i < 92; i++) {
+    const t = 0.05 + i / 92 * 0.93;
+    for (const sd of [-1, 1]) {
+      if (R() < 0.07) continue;
+      const [px, py] = rach(t), Lf = 236 * Math.pow(Math.sin(Math.PI * (0.1 + 0.9 * t)), 0.55) * (0.85 + R() * 0.2);
+      const a = (0.95 + R() * 0.2 - t * 0.35), ex = px + sd * Math.sin(a) * Lf, ey = py - Math.cos(a) * Lf * 0.55 + Lf * 0.12;
+      const lum = 20 + R() * 16 + (1 - t) * 4, hue = 78 + R() * 22;
+      g.strokeStyle = `hsl(${hue},${42 + R() * 18}%,${lum}%)`;
+      // foliole effilée : trois traits de largeur décroissante
+      for (const [w, k] of [[6, 0.45], [4, 0.75], [2, 1]]) {
+        g.lineWidth = w; g.beginPath(); g.moveTo(px, py);
+        g.quadraticCurveTo(px + (ex - px) * 0.5, py + (ey - py) * 0.5 - 10, px + (ex - px) * k, py + (ey - py) * k + 6 * k * k); g.stroke();
+      }
+    }
   }
-  const blobs = low ? 3 : 5 + (R() * 3 | 0), cy = b[1] + h * 0.68, cr = h * 0.32;
-  const leaf = LEAVES[(R() * LEAVES.length) | 0];
-  for (let k = 0; k < blobs; k++) {
-    const ang = R() * 6.28, d = k === 0 ? 0 : cr * (0.45 + R() * 0.45), yy = (k === 0 ? 0.1 : (R() - 0.35)) * cr * 0.8;
-    const s = cr * (k === 0 ? 0.85 : 0.5 + R() * 0.3);
-    if (!foliageGeo) { foliageGeo = makeFoliage(1); foliageLow = makeFoliage(1); }
-    addGeoShaded(ctx.side, low ? foliageLow : foliageGeo, [b[0] + Math.cos(ang) * d, cy + yy, b[2] + Math.sin(ang) * d], R() * 6, k % 3 === 2 ? LEAVES[(R() * 5) | 0] : leaf, [s, s * 0.85, s], R);
+  g.strokeStyle = '#8a8a4a'; g.beginPath(); g.moveTo(bx, by);
+  for (let t = 0; t <= 1; t += 0.05) { const [x, y] = rach(t); g.lineTo(x, y); }
+  g.lineWidth = 5; g.stroke();
+}
+function vegDrawFan(g, ox, oy, R) {
+  // éventail de brins depuis le bas de la case : touffe d'herbe, aiguilles de pin, fougère
+  const bx = ox + 256, by = oy + 504, B = [];
+  for (let i = 0; i < 110; i++) {
+    const a = (R() - 0.5) * 2.3, len = (230 + R() * 250) * (1 - Math.abs(a) * 0.3);
+    B.push({ a, len, sh: R(), bend: a * (0.1 + R() * 0.25) + (R() - 0.5) * 0.2 });
+  }
+  B.sort((p, q) => p.sh - q.sh);
+  g.lineCap = 'round';
+  for (const b of B) {
+    const hue = 72 + R() * 40, lum = 16 + b.sh * 30;
+    g.strokeStyle = `hsl(${hue},${34 + R() * 24}%,${lum}%)`;
+    const ex = bx + Math.sin(b.a + b.bend) * b.len, ey = by - Math.cos(b.a + b.bend) * b.len;
+    const cx = bx + Math.sin(b.a) * b.len * 0.55, cy = by - Math.cos(b.a) * b.len * 0.55;
+    for (const [w, k] of [[5, 0.35], [3.2, 0.7], [1.6, 1]]) {
+      g.lineWidth = w; g.beginPath(); g.moveTo(bx + (R() - 0.5) * 16, by);
+      const qx = bx + (cx - bx) * k, qy = by + (cy - by) * k;
+      g.quadraticCurveTo(qx, qy, bx + (ex - bx) * k + (cx - bx) * (1 - k) * 0.5, by + (ey - by) * k + (cy - by) * (1 - k) * 0.5); g.stroke();
+    }
+  }
+}
+/* mipmaps qui conservent la couverture : à chaque niveau on remonte l'alpha pour garder la même proportion de pixels opaques
+   (sinon les cartes alpha-testées fondent et deviennent transparentes au loin) */
+function vegMipmaps(data) {
+  const levels = [{ data, width: VEG_AS, height: VEG_AS }];
+  // histogramme de l'alpha d'une case : la couverture pour un facteur k se lit sans reparcourir les pixels
+  const hist = (d, w, x0, y0, ts) => { const hh = new Float64Array(256); for (let y = y0; y < y0 + ts; y++) for (let x = x0; x < x0 + ts; x++) hh[d[(y * w + x) * 4 + 3]]++; for (let i = 0; i < 256; i++) hh[i] /= ts * ts; return hh; };
+  const cover = (hh, k) => { let n = 0; for (let a = 255; a > 0 && a * k >= 127.5; a--) n += hh[a]; return n; };
+  const c0 = []; for (let t = 0; t < 4; t++) c0.push(cover(hist(data, VEG_AS, (t % 2) * VEG_TS, (t >> 1) * VEG_TS, VEG_TS), 1));
+  let src = data, w = VEG_AS;
+  while (w > 1) {
+    const h = w >> 1, d = new Uint8Array(h * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < h; x++) {
+      const i = (y * h + x) * 4, a = ((2 * y) * w + 2 * x) * 4, b = a + 4, c = a + w * 4, e = c + 4;
+      for (let k = 0; k < 4; k++) d[i + k] = (src[a + k] + src[b + k] + src[c + k] + src[e + k] + 2) >> 2;
+    }
+    const ts = h >> 1;
+    if (ts >= 2) for (let t = 0; t < 4; t++) {
+      const x0 = (t % 2) * ts, y0 = (t >> 1) * ts;
+      const hh = hist(d, h, x0, y0, ts); let lo = 1, hi = 6;
+      for (let it = 0; it < 12; it++) { const m = (lo + hi) / 2; if (cover(hh, m) < c0[t]) lo = m; else hi = m; }
+      for (let y = y0; y < y0 + ts; y++) for (let x = x0; x < x0 + ts; x++) { const i = (y * h + x) * 4 + 3; d[i] = Math.min(255, d[i] * hi); }
+    }
+    levels.push({ data: d, width: h, height: h });
+    src = d; w = h;
+  }
+  return levels;
+}
+function makeFoliageAtlas() {
+  // canvas lu une seule fois : rendu sur le processeur (willReadFrequently) pour éviter une relecture GPU lente
+  const c = document.createElement('canvas'); c.width = c.height = VEG_AS;
+  const g = c.getContext('2d', { willReadFrequently: true }), R = mulberry32(4242);
+  g.clearRect(0, 0, VEG_AS, VEG_AS);
+  const draws = [vegDrawLeaves, vegDrawSpray, vegDrawFrond, vegDrawFan];
+  for (let t = 0; t < 4; t++) {
+    const ox = (t % 2) * VEG_TS, oy = (t >> 1) * VEG_TS;
+    g.save(); g.beginPath(); g.rect(ox + 4, oy + 4, VEG_TS - 8, VEG_TS - 8); g.clip();
+    draws[t](g, ox, oy, R); g.restore();
+  }
+  const data = new Uint8Array(g.getImageData(0, 0, VEG_AS, VEG_AS).data.buffer.slice(0));
+  // couleur sous les pixels transparents = couleur moyenne de la case (pas de liseré noir au filtrage)
+  for (let t = 0; t < 4; t++) {
+    const ox = (t % 2) * VEG_TS, oy = (t >> 1) * VEG_TS; let r = 0, gg = 0, b = 0, n = 0;
+    for (let y = oy; y < oy + VEG_TS; y += 2) for (let x = ox; x < ox + VEG_TS; x += 2) { const i = (y * VEG_AS + x) * 4; if (data[i + 3] > 200) { r += data[i]; gg += data[i + 1]; b += data[i + 2]; n++; } }
+    n = n || 1;
+    for (let y = oy; y < oy + VEG_TS; y++) for (let x = ox; x < ox + VEG_TS; x++) {
+      const i = (y * VEG_AS + x) * 4, a = data[i + 3] / 255;
+      if (a < 1) { data[i] = data[i] * a + r / n * (1 - a); data[i + 1] = data[i + 1] * a + gg / n * (1 - a); data[i + 2] = data[i + 2] * a + b / n * (1 - a); }
+    }
+  }
+  const tex = new THREE.DataTexture(data, VEG_AS, VEG_AS, THREE.RGBAFormat);
+  tex.mipmaps = vegMipmaps(data);
+  tex.generateMipmaps = false; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+/* matériau du feuillage (partagé, jamais libéré avec les tronçons) */
+function foliage() {
+  if (FOL) return FOL;
+  const tex = makeFoliageAtlas(), u = { uTime: { value: 0 } };
+  // Lambert : éclairage calculé par sommet (normales du houppier → lumière douce) et pixel très bon marché (beaucoup de recouvrement)
+  const mat = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = u.uTime;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        float wph = position.x * 0.23 + position.z * 0.19 + position.y * 0.31;
+        transformed.x += sin(uTime * 1.7 + wph) * 0.045 + sin(uTime * 4.3 + wph * 2.7) * 0.015;
+        transformed.z += cos(uTime * 1.3 + wph) * 0.045;
+        transformed.y += sin(uTime * 3.1 + wph * 1.9) * 0.015;`);
+    // normales « houppier » : même éclairage sur les deux faces d'une carte (pas de face arrière sombre)
+    sh.fragmentShader = sh.fragmentShader.replace('( gl_FrontFacing ) ? vIndirectFront : vIndirectBack', 'vIndirectFront').replace('( gl_FrontFacing ) ? vLightFront : vLightBack', 'vLightFront');
+  };
+  const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.5, side: THREE.DoubleSide });
+  FOL = { tex, mat, depth, u };
+  return FOL;
+}
+const vegTick = () => { FOL.u.uTime.value = performance.now() * 0.001; };
+/* appelé par buildChunk (renderer.js) : transforme le buffer de feuillage du tronçon en un maillage */
+function addFoliageMesh(group, B) {
+  if (!B || !B.p.length) return null;
+  const F = foliage(), m = new THREE.Mesh(toGeo(B, true), F.mat);
+  m.customDepthMaterial = F.depth; m.castShadow = true; m.receiveShadow = true;
+  m.onBeforeRender = vegTick;
+  group.add(m);
+  return m;
+}
+const leafBuf = (ctx) => ctx.leaf || (ctx.leaf = newBuf());
+
+/* ---- primitives de végétation ---- */
+function vegRect(t) {   // [u0, u1, v bas (base), v haut] dans l'atlas (v = ligne du canvas / 1024)
+  const e = 3 / VEG_AS, cx = t % 2, cy = t >> 1;
+  return [cx * 0.5 + e, cx * 0.5 + 0.5 - e, (cy + 1) * 0.5 - e, cy * 0.5 + e];
+}
+function vegVert(B, p, n, c, u, v) { B.p.push(p[0], p[1], p[2]); B.n.push(n[0], n[1], n[2]); B.c.push(c[0], c[1], c[2]); B.u.push(u, v); }
+/* bande de feuillage entre deux bords EA[i] et EB[i] (polylignes), normales nrm[i], couleurs col[i] ;
+   la texture avance le long de la bande (u si alongU : rameau de sapin, tige à gauche ; sinon v : base en bas)
+   et va de a0 à a1 en travers (0..1 : case entière, 0..0.5 / 0.5..1 : demi-palme) */
+function vegStrip(B, EA, EB, t, nrm, col, alongU, a0 = 0, a1 = 1) {
+  const [u0, u1, vb, vt] = vegRect(t), n = EA.length - 1;
+  const uv = (s, w) => alongU ? [u0 + (u1 - u0) * s, vb + (vt - vb) * w] : [u0 + (u1 - u0) * w, vb + (vt - vb) * s];
+  for (let i = 0; i < n; i++) {
+    const s0 = i / n, s1 = (i + 1) / n, ua = uv(s0, a0), ub = uv(s0, a1), uc = uv(s1, a1), ud = uv(s1, a0);
+    vegVert(B, EA[i], nrm[i], col[i], ua[0], ua[1]); vegVert(B, EB[i], nrm[i], col[i], ub[0], ub[1]); vegVert(B, EB[i + 1], nrm[i + 1], col[i + 1], uc[0], uc[1]);
+    vegVert(B, EA[i], nrm[i], col[i], ua[0], ua[1]); vegVert(B, EB[i + 1], nrm[i + 1], col[i + 1], uc[0], uc[1]); vegVert(B, EA[i + 1], nrm[i + 1], col[i + 1], ud[0], ud[1]);
+  }
+}
+/* ruban centré sur pts[i], de demi-largeur sides[i] */
+function vegRibbon(B, pts, sides, t, nrm, col, alongU) {
+  vegStrip(B, pts.map((q, i) => vAdd(q, sides[i], -1)), pts.map((q, i) => vAdd(q, sides[i])), t, nrm, col, alongU);
+}
+/* carte plane : base au centre bas, V = demi-hauteur… ici V = vecteur base → sommet complet, U = demi-largeur */
+function vegCard(B, base, U, V, t, n, cb, ct) {
+  vegRibbon(B, [base, vAdd(base, V)], [U, U], t, [n, n], [cb, ct], false);
+}
+/* branche ou tronc : cylindre effilé de a vers b, normales lisses, écorce tachetée (couleurs par sommet) */
+function vegLimb(B, a, b, r0, r1, col, sides, R, mottle = 0.18, col2) {
+  const d = vNorm([b[0] - a[0], b[1] - a[1], b[2] - a[2]]);
+  const e1 = vNorm(vCross(Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], d)), e2 = vCross(d, e1);
+  const ring = (c, r, k) => { const out = []; for (let i = 0; i <= sides; i++) { const t = i / sides * 6.283 + k; const n = vAdd(vMul(e1, Math.cos(t)), e2, Math.sin(t)); out.push([vAdd(c, n, r), n]); } return out; };
+  const ra = ring(a, r0, 0), rb = ring(b, r1, 0);
+  const cc = () => { const base = col2 && R() < 0.45 ? col2 : col, k = 1 - mottle / 2 + R() * mottle; return [base[0] * k, base[1] * k, base[2] * k]; };
+  const ca = [], cb = []; for (let i = 0; i <= sides; i++) { ca.push(cc()); cb.push(cc()); }
+  ca[sides] = ca[0]; cb[sides] = cb[0];
+  for (let i = 0; i < sides; i++) {
+    const P = [ra[i], ra[i + 1], rb[i + 1], rb[i]], Cc = [ca[i], ca[i + 1], cb[i + 1], cb[i]];
+    for (const k of [0, 1, 2, 0, 2, 3]) { B.p.push(P[k][0][0], P[k][0][1], P[k][0][2]); B.n.push(P[k][1][0], P[k][1][1], P[k][1][2]); B.c.push(Cc[k][0], Cc[k][1], Cc[k][2]); }
+  }
+}
+/* masse sombre au cœur du houppier : évite de voir le ciel à travers et donne l'ombre interne */
+function vegCore(B, c, sx, sy, sz, col) { addGeo(B, prims().ball, c, 0, col, [sx, sy, sz]); }
+
+/* ---- espèces ---- */
+const BARK = { oak: hex3('#4a3b2e'), oak2: hex3('#5c4c3c'), plane: hex3('#a59a80'), plane2: hex3('#6f6a55'), fir: hex3('#3a2e26'), pine: hex3('#8a5236'), pineLow: hex3('#4e4038'), palm: hex3('#7d6a52'), palm2: hex3('#5e5040'), olive: hex3('#6b665c') };
+/* feuillu : tronc, 3 à 6 charpentières qui portent chacune une masse de feuillage couverte de cartes */
+function vegBroadleaf(ctx, b, h, R, o) {
+  const lo = ctx.lod, S = ctx.side, L = leafBuf(ctx);
+  const rT = (o.trunkR || 0.1) + h * 0.017, th = h * (o.trunkH || 0.42);
+  const lean = [(R() - 0.5) * h * 0.05, 0, (R() - 0.5) * h * 0.05];
+  const top = [b[0] + lean[0], b[1] + th, b[2] + lean[2]];
+  vegLimb(S, b, [b[0], b[1] + 0.6, b[2]], rT * 1.45, rT * 1.05, o.bark, lo ? 5 : 8, R, 0.25, o.bark2);   // empattement
+  vegLimb(S, [b[0], b[1] + 0.55, b[2]], top, rT * 1.05, rT * 0.72, o.bark, lo ? 5 : 8, R, 0.25, o.bark2);
+  const cc = [top[0], b[1] + h * (o.cy || 0.66), top[2]], Rx = h * (o.cw || 0.33), Ry = h * (o.ch || 0.27);
+  const n = lo ? 3 : (o.clusters || 6) + ((R() * 3) | 0), tint = o.tint;
+  for (let k = 0; k < n; k++) {
+    const az = (k / n) * 6.283 + R() * 0.8, el = k === 0 && !lo ? 1 : 0.15 + R() * 0.7, hr = k === 0 && !lo ? 0.1 : 0.62 + R() * 0.3;
+    const cpos = [cc[0] + Math.cos(az) * Rx * hr * (lo ? 0.55 : 0.85), cc[1] + (el - 0.45) * Ry * 0.9, cc[2] + Math.sin(az) * Rx * hr * (lo ? 0.55 : 0.85)];
+    const ri = (lo ? 0.7 : 0.5 + R() * 0.15) * Rx;
+    if (!lo) vegLimb(S, vAdd(top, [0, -0.3, 0]), vAdd(cpos, [0, -ri * 0.3, 0]), rT * 0.62, rT * 0.16, o.bark, 5, R, 0.2, o.bark2);
+    vegCore(S, [cpos[0], cpos[1] + ri * 0.1, cpos[2]], ri * 0.42, ri * 0.36, ri * 0.42, vCol(o.core, 1, R));
+    const m = lo ? 6 : (o.cards || 11);
+    for (let j = 0; j < m; j++) {
+      const d = vRandUnit(R); d[1] = d[1] * 0.9 + 0.05;
+      const dn = vNorm(d), pos = [cpos[0] + dn[0] * ri * (0.45 + R() * 0.4), cpos[1] + dn[1] * ri * 0.75 * (0.45 + R() * 0.4), cpos[2] + dn[2] * ri * (0.45 + R() * 0.4)];
+      const s = ri * (lo ? 1.3 : 0.95 + R() * 0.35), [U, V] = vBasis(vNorm(vAdd(dn, vRandUnit(R), 0.35)), (R() - 0.5) * 1.3);
+      // normale d'éclairage : vers l'extérieur du houppier (forme globale) + un peu de la masse locale + ciel
+      const ln = vNorm([(pos[0] - cc[0]) / Rx + dn[0] * 0.6, (pos[1] - cc[1]) / Ry * 0.8 + dn[1] * 0.6 + 0.3, (pos[2] - cc[2]) / Rx + dn[2] * 0.6]);
+      const hk = Math.max(0, Math.min(1, (pos[1] - (cc[1] - Ry)) / (2 * Ry))), out = Math.max(0, vDot(ln, dn));
+      const k0 = 0.62 + 0.3 * hk + 0.14 * out, col = vCol(tint, k0, R);
+      vegCard(L, vAdd(pos, V, -s * 0.55), vMul(U, s * 0.55), vMul(V, s * 1.1), 0, ln, vMul(col, 0.82), col);
+    }
+  }
+}
+/* sapin / épicéa : étages de rameaux (cartes « rameau » qui partent du tronc et retombent), cône sombre au cœur */
+function vegFir(ctx, b, h, R, o) {
+  const lo = ctx.lod, S = ctx.side, L = leafBuf(ctx), tint = o.tint;
+  const y0 = h * (o.clear || 0.12), Rm = h * (o.w || 0.21) * (0.9 + R() * 0.2), topY = h * 0.98;
+  vegLimb(S, b, [b[0], b[1] + topY, b[2]], 0.1 + h * 0.016, 0.03, BARK.fir, lo ? 4 : 6, R, 0.2);
+  vegCore(S, [b[0], b[1] + y0 + (topY - y0) * 0.42, b[2]], Rm * 0.34, (topY - y0) * 0.48, Rm * 0.34, vCol(o.core, 1, R));
+  const nw = lo ? 4 : 7 + (h > 17 ? 1 : 0);
+  for (let k = 0; k < nw; k++) {
+    const t = (k + R() * 0.4) / nw, y = y0 + (topY - y0) * t * 0.94, rad = Rm * Math.pow(1 - t, 0.9) + 0.45;
+    const m = lo ? 4 : 5 + ((R() * 2) | 0), az0 = R() * 6.283;
+    for (let j = 0; j < m; j++) {
+      const az = az0 + j * 6.283 / m + (R() - 0.5) * 0.6, ca = Math.cos(az), sa = Math.sin(az);
+      const len = rad * (0.85 + R() * 0.3), dir = vNorm([ca, -0.12 - R() * 0.22, sa]), droop = (o.droop || 0.22) * len;
+      const roll = (R() - 0.5) * (lo ? 1.2 : 2.1), T = [-sa, 0, ca], side0 = vAdd(vMul(T, Math.cos(roll)), vCross(dir, T), Math.sin(roll));
+      const w = len * (lo ? 0.5 : 0.42), segs = lo ? 1 : 2, pts = [], sides = [], nrm = [], col = [];
+      const base = [b[0] + ca * 0.12, b[1] + y, b[2] + sa * 0.12];
+      for (let i = 0; i <= segs; i++) {
+        const s = i / segs;
+        pts.push([base[0] + dir[0] * len * s, base[1] + dir[1] * len * s - droop * s * s, base[2] + dir[2] * len * s]);
+        sides.push(vMul(side0, w * (0.55 + 0.45 * s)));
+        nrm.push(vNorm([ca, 0.45 + t * 0.5, sa]));
+        col.push(vCol(tint, 0.5 + 0.3 * t + 0.28 * s, R));
+      }
+      vegRibbon(L, pts, sides, 1, nrm, col, true);
+      // second rameau croisé (de près) : volume quel que soit l'angle de vue
+      if (!lo) { const s2 = vCross(dir, side0); vegRibbon(L, [pts[0], pts[segs]], [vMul(s2, w * 0.4), vMul(s2, w * 0.75)], 1, [nrm[0], nrm[segs]], [col[0], col[segs]], true); }
+    }
+  }
+  // flèche (pousse terminale)
+  for (const T of [[1, 0, 0], [0, 0, 1]]) vegRibbon(L, [[b[0], b[1] + topY - 1.4, b[2]], [b[0], b[1] + topY + 0.5, b[2]]], [vMul(T, 0.45), vMul(T, 0.2)], 1, [[0, 1, 0], [0, 1, 0]], [vCol(tint, 0.85), vCol(tint, 1.05)], true);
+}
+/* pin sylvestre / pin parasol : long fût nu, charpentières qui portent des plateaux d'aiguilles (cartes « éventail ») */
+function vegPine(ctx, b, h, R, o) {
+  const lo = ctx.lod, S = ctx.side, L = leafBuf(ctx), umb = o.umbrella, tint = o.tint;
+  const rT = 0.08 + h * 0.011, lean = umb ? 0.08 + R() * 0.1 : R() * 0.05, az = R() * 6.283;
+  const mid = [b[0] + Math.cos(az) * h * lean * 0.3, b[1] + h * 0.35, b[2] + Math.sin(az) * h * lean * 0.3];
+  const top = [b[0] + Math.cos(az) * h * lean, b[1] + h * (umb ? 0.62 : 0.66), b[2] + Math.sin(az) * h * lean];
+  vegLimb(S, b, mid, rT * 1.25, rT, BARK.pineLow, lo ? 5 : 7, R, 0.2);
+  vegLimb(S, mid, top, rT, rT * 0.7, o.bark || BARK.pine, lo ? 5 : 7, R, 0.25, BARK.pineLow);
+  const n = lo ? 2 : 3 + ((R() * 3) | 0);
+  for (let k = 0; k < n; k++) {
+    const a = az + k * 6.283 / n + (R() - 0.5) * 0.9, rr = h * (umb ? 0.2 : 0.11) * (0.6 + R() * 0.5);
+    const c = [top[0] + Math.cos(a) * rr, b[1] + h * (umb ? 0.8 + R() * 0.07 : 0.74 + R() * 0.2), top[2] + Math.sin(a) * rr];
+    const rx = h * (umb ? 0.19 : 0.12) * (0.8 + R() * 0.4), ry = rx * (umb ? 0.38 : 0.62);
+    if (!lo) vegLimb(S, top, vAdd(c, [0, -ry * 0.5, 0]), rT * 0.7, rT * 0.25, o.bark || BARK.pine, 5, R, 0.25, BARK.pineLow);
+    vegCore(S, [c[0], c[1] - ry * 0.1, c[2]], rx * 0.55, ry * 0.5, rx * 0.55, vCol(o.core, 1, R));
+    const m = lo ? 5 : (umb ? 12 : 9);
+    for (let j = 0; j < m; j++) {
+      const d = vRandUnit(R); d[1] = Math.abs(d[1]) * (umb ? 0.7 : 0.9) + (j % 4 === 0 ? -0.4 : 0.1);
+      const dn = vNorm(d), s = rx * (lo ? 0.95 : 0.6 + R() * 0.25);
+      const basePos = [c[0] + dn[0] * rx * 0.35, c[1] + dn[1] * ry * 0.35, c[2] + dn[2] * rx * 0.35];
+      const V = vMul(dn, s * 1.25), U = vMul(vNorm(vCross(dn, vRandUnit(R))), s * 0.75);
+      const ln = vNorm([(basePos[0] - c[0]) / rx + dn[0], (basePos[1] - c[1]) / ry + 0.5, (basePos[2] - c[2]) / rx + dn[2]]);
+      const k0 = 0.6 + 0.35 * Math.max(0, dn[1]) + 0.1 * R();
+      vegCard(L, basePos, U, V, 3, ln, vCol(tint, k0 * 0.75, R), vCol(tint, k0 * 1.05, R));
+    }
+  }
+}
+/* cyprès : fuseau sombre et dense couvert de rameaux dressés */
+function vegCypress(ctx, b, h, R, o) {
+  const lo = ctx.lod, S = ctx.side, L = leafBuf(ctx), tint = o.tint, rmax = h * 0.085;
+  vegLimb(S, b, [b[0], b[1] + h * 0.25, b[2]], 0.16, 0.1, BARK.fir, 5, R, 0.2);
+  addGeo(S, prims().ball, [b[0], b[1] + h * 0.52, b[2]], R() * 6, vCol(o.core, 1, R), [rmax * 0.82, h * 0.47, rmax * 0.82]);
+  const nl = lo ? 3 : 8, m = lo ? 3 : 5;
+  const rad = (t) => rmax * (t < 0.3 ? 0.72 + t / 0.3 * 0.28 : 1 - Math.pow((t - 0.3) / 0.7, 1.5) * 0.9);
+  for (let k = 0; k < nl; k++) {
+    const t = (k + 0.5) / nl, y = h * (0.07 + 0.86 * t), r = rad(t), az0 = R() * 6.283;
+    for (let j = 0; j < m; j++) {
+      const az = az0 + j * 6.283 / m, ca = Math.cos(az), sa = Math.sin(az), len = h * (lo ? 0.34 : 0.2);
+      const base = [b[0] + ca * r * 0.55, b[1] + y - len * 0.45, b[2] + sa * r * 0.55], dir = vNorm([ca * 0.22, 1, sa * 0.22]);
+      const T = [-sa, 0, ca], w = r * (lo ? 1.1 : 0.85), n0 = vNorm([ca, 0.35, sa]);
+      vegRibbon(L, [base, vAdd(base, dir, len)], [vMul(T, w * 0.8), vMul(T, w * 0.6)], 1, [n0, n0], [vCol(tint, 0.6 + 0.25 * t, R), vCol(tint, 0.85 + 0.2 * t, R)], true);
+    }
+  }
+}
+/* palmier : stipe annelé et courbé, palmes en V qui retombent, palmes sèches et régimes de dattes */
+function vegPalm(ctx, it, p) {
+  const lo = ctx.lod, S = ctx.side, L = leafBuf(ctx), R = mulberry32(((it.h * 977) | 0) + ((it.rot * 1000) | 0));
+  const base = lateral(p, it.side * it.lat, groundY(it.side, it.lat) - 0.05), h = it.h, yaw = it.rot, lean = Math.abs(it.lean);
+  const ns = lo ? 4 : 9; let prev = base;
+  for (let i = 0; i < ns; i++) {
+    const t = (i + 1) / ns, bend = lean * t * t * h * 0.5;
+    const pt = [base[0] + Math.sin(yaw) * bend, base[1] + h * t, base[2] + Math.cos(yaw) * bend];
+    const r0 = 0.27 - 0.08 * (i / ns) + (i === 0 ? 0.08 : 0), r1 = 0.27 - 0.08 * t;
+    vegLimb(S, prev, pt, r0, r1, i % 2 ? BARK.palm : BARK.palm2, lo ? 5 : 8, R, 0.12);
+    prev = pt;
+  }
+  const top = prev, P = prims();
+  addGeo(S, P.ball, vAdd(top, [0, -0.25, 0]), 0, hex3('#5a4a30'), [0.42, 0.55, 0.42]);   // gaines des palmes
+  if (!lo) for (let k = 0; k < 5; k++) { const a = R() * 6.283; addGeo(S, P.ball, [top[0] + Math.cos(a) * 0.3, top[1] - 0.55, top[2] + Math.sin(a) * 0.3], 0, hex3('#b8862a'), [0.22, 0.32, 0.22]); }
+  const nf = lo ? 7 : 15;
+  for (let k = 0; k < nf; k++) {
+    const az = yaw + k * 2.4 + R() * 0.3, ca = Math.cos(az), sa = Math.sin(az);
+    const young = k < 3, dead = !young && !lo && k >= nf - 2;
+    const el = young ? 0.9 + R() * 0.35 : dead ? -1.1 : 0.15 + R() * 0.45, len = h * (0.36 + R() * 0.12) * (young ? 0.75 : 1);
+    const dir = [ca * Math.cos(el), Math.sin(el), sa * Math.cos(el)], T = [-sa, 0, ca];
+    const segs = lo ? 2 : 4, pts = [], sl = [], sr = [], nrm = [], col = [];
+    const tint = dead ? hex3('#9a7a4a') : young ? [0.95, 1.05, 0.8] : [0.88 + R() * 0.12, 0.95 + R() * 0.1, 0.78];
+    for (let i = 0; i <= segs; i++) {
+      const s = i / segs, w = len * 0.26 * Math.sin(Math.PI * (0.15 + 0.85 * s)) + 0.08;
+      const pt = [top[0] + dir[0] * len * s, top[1] + dir[1] * len * s - len * s * s * (dead ? 0.1 : 0.42), top[2] + dir[2] * len * s];
+      pts.push(pt);
+      // folioles relevées en V de chaque côté du rachis
+      const up = [0, 1, 0];
+      sl.push(vAdd(vMul(T, -w * 0.94), up, w * 0.32)); sr.push(vAdd(vMul(T, w * 0.94), up, w * 0.32));
+      nrm.push(vNorm([dir[0] * 0.4, 1, dir[2] * 0.4]));
+      col.push(vCol(tint, 0.68 + 0.32 * s, R));
+    }
+    // demi-palme gauche et droite (case 2 coupée en deux le long du rachis)
+    vegStrip(L, pts.map((q, i) => vAdd(q, sl[i])), pts, 2, nrm, col, false, 0, 0.5);
+    vegStrip(L, pts, pts.map((q, i) => vAdd(q, sr[i])), 2, nrm, col, false, 0.5, 1);
+  }
+}
+/* sous-bois : fougères et petits buissons au pied des arbres de forêt */
+function vegUnder(ctx, b, R, tint, kind) {
+  const L = leafBuf(ctx), n = kind === 'fern' ? 5 : 4, s = 0.6 + R() * 0.5;
+  for (let k = 0; k < n; k++) {
+    const az = k * 6.283 / n + R() * 0.5, d = [Math.cos(az), 0.7, Math.sin(az)];
+    const U = vMul(vNorm(vCross(d, [0, 1, 0])), s * 0.6), V = vMul(vNorm(d), s * 1.3);
+    vegCard(L, [b[0], b[1] - 0.05, b[2]], U, V, kind === 'fern' ? 3 : 0, vNorm([d[0], 1.2, d[2]]), vCol(tint, 0.5, R), vCol(tint, 0.85, R));
+  }
+}
+/* touffe d'herbe : deux cartes croisées « éventail » */
+function vegTuft(L, b, hgt, yaw, col) {
+  for (const a of [yaw, yaw + 1.57]) {
+    const U = [Math.cos(a) * hgt * 0.65, 0, Math.sin(a) * hgt * 0.65];
+    vegCard(L, b, U, [0, hgt, 0], 3, [Math.sin(a) * 0.3, 1, -Math.cos(a) * 0.3], vMul(col, 0.62), col);
+  }
+}
+
+/* ---- branchement sur le décor ---- */
+const VEG_TINT = {
+  oak: [[0.95, 1, 0.82], [0.85, 0.95, 0.8], [1.05, 1.02, 0.78]], linden: [[1.08, 1.12, 0.82], [1, 1.08, 0.8]], plane: [[1.12, 1.12, 0.78], [1.05, 1.1, 0.8]],
+  holm: [[0.72, 0.82, 0.72]], fir: [[0.92, 1, 0.98], [0.85, 0.95, 0.95], [1, 1.02, 0.95]], pine: [[0.66, 0.8, 0.74], [0.72, 0.84, 0.74]], stone: [[0.74, 0.88, 0.72]],
+  cypress: [[0.62, 0.78, 0.66]]
+};
+const CORE = { leaf: hex3('#2a4020'), fir: hex3('#1a2b20'), pine: hex3('#22321d'), cyp: hex3('#18281a') };
+const pick = (arr, R) => arr[(R() * arr.length) | 0];
+DECOR.tree = function (ctx0, it, p, a) {
+  // arbres loin de la route (fond de parc, forêt profonde) : version allégée même de près
+  leafBuf(ctx0);
+  const ctx = !ctx0.lod && it.lat > RW + 28 ? Object.assign({}, ctx0, { lod: 1 }) : ctx0;
+  const [, f] = axes(p.th), b0 = lateral(p, it.side * it.lat, 0), al = it.along || 0;
+  const b = [b0[0] + f[0] * al, p.y + groundY(it.side, it.lat) - 0.1, b0[2] + f[2] * al];
+  const R = mulberry32(((it.h * 1000) | 0) + a * 7 + (it.side > 0 ? 3 : 0) + ((it.lat * 10) | 0)), h = it.h, g = MAP.ground;
+  const zn = (segAt(a) && segAt(a).zoneName) || '';
+  if (it.kind === 'cypress') return vegCypress(ctx, b, h, R, { tint: VEG_TINT.cypress[0], core: CORE.cyp });
+  if (it.kind === 'pine') {
+    if (g === 'beach') return vegPine(ctx, b, h, R, { umbrella: true, tint: VEG_TINT.stone[0], core: CORE.pine });
+    if (g === 'city' || /pins/i.test(zn)) return vegPine(ctx, b, h, R, { umbrella: false, tint: pick(VEG_TINT.pine, R), core: CORE.pine });
+    vegFir(ctx, b, h, R, { tint: pick(VEG_TINT.fir, R), core: CORE.fir, clear: curZone === 'foret' ? 0.1 + R() * 0.15 : 0.04, w: 0.19 + R() * 0.05 });
+  } else if (g === 'beach') {
+    vegBroadleaf(ctx, b, h * 0.75, R, { tint: VEG_TINT.holm[0], core: CORE.leaf, bark: BARK.olive, bark2: BARK.oak2, cw: 0.42, ch: 0.26, cy: 0.62, trunkH: 0.35 });
+  } else if (g === 'city') {
+    vegBroadleaf(ctx, b, h, R, { tint: pick(VEG_TINT.linden, R), core: CORE.leaf, bark: BARK.oak2, bark2: BARK.oak, cw: 0.3, ch: 0.3, cy: 0.65 });
+  } else {
+    const forest = curZone === 'foret';
+    vegBroadleaf(ctx, b, h, R, { tint: pick(VEG_TINT.oak, R), core: CORE.leaf, bark: BARK.oak, bark2: BARK.oak2, cw: forest ? 0.27 : 0.36, ch: forest ? 0.3 : 0.27, cy: forest ? 0.7 : 0.62, trunkH: forest ? 0.5 : 0.4 });
+  }
+  if (curZone === 'foret' && !ctx.lod && R() < 0.55) {
+    const d = (R() - 0.5) * 3;
+    vegUnder(ctx, [b[0] + f[0] * d + 0.8, b[1] + 0.05, b[2] + f[2] * d], R, R() < 0.6 ? [0.8, 1, 0.75] : [0.9, 0.95, 0.75], R() < 0.6 ? 'fern' : 'bush');
   }
 };
 DECOR.streettree = function (ctx, it, p, a) {
-  // platane d'alignement : grille au pied, tronc clair tacheté, houppier en touffes
-  const P = prims(), b = lateral(p, it.side * it.lat, 0.15), [r, f] = axes(p.th), R = mulberry32(a * 13 + (it.side > 0 ? 1 : 0)), h = it.h;
+  // platane d'alignement : grille au pied, tronc clair tacheté (écorce qui pèle), large houppier au-dessus du trottoir
+  const b = lateral(p, it.side * it.lat, 0.15), [r, f] = axes(p.th), R = mulberry32(a * 13 + (it.side > 0 ? 1 : 0)), h = it.h * 1.4 + 1.2;
   box(ctx.side, [b[0], b[1] - 0.02, b[2]], r, f, 1.3, 0.05, 1.3, hex3('#3a3b3e'));
-  addGeo(ctx.side, P.cyl, b, 0, hex3('#9a8c74'), [0.16, h * 0.55, 0.16]);
-  const n = ctx.lod ? 2 : 5;
-  for (let k = 0; k < n; k++) {
-    const ang = R() * 6.28, d = k ? h * 0.18 : 0, s = h * (k ? 0.2 + R() * 0.08 : 0.26);
-    if (!foliageGeo) { foliageGeo = makeFoliage(1); foliageLow = makeFoliage(1); }
-    addGeoShaded(ctx.side, ctx.lod ? foliageLow : foliageGeo, [b[0] + Math.cos(ang) * d, b[1] + h * 0.72 + (R() - 0.3) * h * 0.15, b[2] + Math.sin(ang) * d], R() * 6, LEAVES[k % 5], [s, s * 0.9, s], R);
+  vegBroadleaf(ctx, b, h, R, { tint: pick(VEG_TINT.plane, R), core: CORE.leaf, bark: BARK.plane, bark2: BARK.plane2, trunkR: 0.06, trunkH: 0.45, cw: 0.36, ch: 0.26, cy: 0.7, clusters: 6, cards: 11 });
+};
+DECOR.palm = vegPalm;
+/* haie champêtre : masse sombre + cartes de feuilles sur les faces visibles */
+DECOR.hedge = function (ctx, it, p, a) {
+  const pm = pose(a + Math.round(it.l / SEG_M / 2)), [r, f] = axes(pm.th), c = lateral(pm, it.side * it.lat, -0.2);
+  box(ctx.side, c, r, f, 1.1, 1.5, it.l, hex3('#2b4520'));
+  const L = leafBuf(ctx), R = mulberry32(a * 31 + (it.side > 0 ? 7 : 0)), step = ctx.lod ? 2.2 : 0.8;
+  for (let d = -it.l / 2 + 0.3; d < it.l / 2; d += step) {
+    const o = [c[0] + f[0] * d, c[1], c[2] + f[2] * d];
+    for (const face of [-1, 1, 0]) {
+      if (ctx.lod && face === 1) continue;
+      const nn = face ? vNorm([r[0] * face * -it.side, 0.35, r[2] * face * -it.side]) : [0, 1, 0];
+      const pos = face ? vAdd(o, r, face * -it.side * (0.62 + R() * 0.12)) : vAdd(o, [0, 1.35, 0]);
+      pos[1] += face ? 0.6 + R() * 0.45 : 0;
+      const s = (ctx.lod ? 1.9 : 1.15) + R() * 0.35, [U, V] = vBasis(vNorm(vAdd(nn, vRandUnit(R), 0.3)), (R() - 0.5) * 1.2);
+      const col = vCol([0.9, 1, 0.78], face ? 0.88 : 1.02, R);
+      vegCard(L, vAdd(pos, V, -s * 0.45), vMul(U, s * 0.55), vMul(V, s * (face ? 1.2 : 0.9)), 0, vNorm(vAdd(nn, [0, 0.5, 0])), vMul(col, 0.8), col);
+    }
+  }
+};
+/* herbe en touffes sur les bas-côtés (campagne, circuit) ; rien au loin */
+DECOR.verge = function (ctx, it, p, a) {
+  if (ctx.lod) return;
+  const L = leafBuf(ctx), R = mulberry32(a * 7919 + 17), [, f] = axes(p.th), z = curZone;
+  const cols = z === 'champs' ? [[1.05, 1.05, 0.7], [0.95, 1, 0.65], [1.15, 1.05, 0.62]] : z === 'foret' ? [[0.7, 0.85, 0.65], [0.8, 0.9, 0.6]] : [[0.95, 1.02, 0.7], [0.88, 0.98, 0.66]];
+  for (const side of [-1, 1]) {
+    const n = 7 + ((R() * 4) | 0);
+    for (let k = 0; k < n; k++) {
+      const far = k > n - 3, lat = far ? RW + 3 + R() * 7 : RW + 0.35 + R() * 2.9, al = R() * 2 * SEG_M;
+      const c = lateral(p, side * lat, groundY(side, lat) - 0.04);
+      vegTuft(L, [c[0] + f[0] * al, c[1], c[2] + f[2] * al], (far ? 0.55 : 0.32) + R() * 0.4, R() * 3.14, vCol(pick(cols, R), 1, R));
+    }
   }
 };

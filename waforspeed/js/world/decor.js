@@ -218,6 +218,11 @@ function generateDecor(map) {
   };
   const gens = { city, beach, country, circuit }[map.ground];
   for (const [z0, z1, z] of ranges) gens[z](z0, z1);
+  // touffes d'herbe sur les bas-côtés herbeux (dessinées dans life.js) : aucun tirage D(), le reste du décor ne change pas
+  if (map.ground === 'country' || map.ground === 'circuit') for (let n = 0; n < len; n += 2) {
+    const z = segments[n].zone;
+    if (z !== 'village' && z !== 'paddock' && z !== 'gravier') item(n, { t: 'verge' });
+  }
 }
 
 /* ---------- bas-côtés : bandes depuis le bord de la route ----------
@@ -658,13 +663,30 @@ DECOR.villa = function (ctx, it, p, a) {
   _villaDraw(ctx, it, p, a);
   C.wall = keep; C.wall2 = keep2;
 };
-/* balcons des immeubles résidentiels */
+/* façades plus réalistes : corniche, bandeau, rez-de-chaussée vitré à montants (éclairé le soir), balcons à garde-corps */
 const _bldDraw = DECOR.bld;
+const BLD_C = { glass: hex3('#1b242e'), frame: hex3('#2b2e33'), rail: hex3('#3a3d42'), shopLit: hex3('#7a5a34') };
 DECOR.bld = function (ctx, b, p, a) {
   _bldDraw(ctx, b, p, a);
+  const pm = pose(a + Math.round(b.len / SEG_M / 2)), [r, f] = axes(pm.th), t = TINTS[b.tint] || TINTS[0];
+  const stone = [0.62 * t[0], 0.6 * t[1], 0.57 * t[2]], face = RW + 6.45;
+  // corniche en saillie au sommet et bandeau au-dessus du rez-de-chaussée
+  box(ctx.side, lateral(pm, b.side * (RW + 6.5 + b.d / 2), b.h - 0.45), r, f, b.d + 0.8, 0.5, b.len + 0.4, stone);
+  box(ctx.side, lateral(pm, b.side * (face - 0.12), 3.55), r, f, 0.3, 0.38, b.len * 0.98, stone);
+  // rez-de-chaussée vitré (vitrines / halls) avec montants ; éclairé le soir pour une partie des immeubles
+  const lit = ENV && ENV.windowsLit && (a % 3 !== 0);
+  box(lit ? ctx.neon : ctx.side, lateral(pm, b.side * (face - 0.03), 0.15), r, f, 0.06, 3.3, b.len * 0.96, lit ? BLD_C.shopLit : BLD_C.glass);
+  const n = Math.max(2, Math.round(b.len / 2.6));
+  for (let k = 0; k <= n; k++) {
+    const d = -b.len * 0.48 + k * b.len * 0.96 / n, c = lateral(pm, b.side * (face - 0.08), 0.15);
+    box(ctx.side, [c[0] + f[0] * d, c[1], c[2] + f[2] * d], r, f, 0.12, 3.4, 0.14, BLD_C.frame);
+  }
   if (!b.balcony) return;
-  const pm = pose(a + Math.round(b.len / SEG_M / 2)), [r, f] = axes(pm.th);
-  for (let y = 4; y < b.h - 1; y += 3) box(ctx.side, lateral(pm, b.side * (RW + 6.2), y), r, f, 0.7, 0.12, b.len * 0.85, hex3('#cfcac0'));
+  // balcons : dalle + garde-corps
+  for (let y = 4; y < b.h - 1; y += 3) {
+    box(ctx.side, lateral(pm, b.side * (RW + 6.2), y), r, f, 0.7, 0.12, b.len * 0.85, hex3('#cfcac0'));
+    if (!ctx.lod) box(ctx.side, lateral(pm, b.side * (RW + 5.87), y + 0.12), r, f, 0.04, 0.95, b.len * 0.85, BLD_C.rail);
+  }
 };
 
 /* hauteur du sol (par rapport à la route) à une distance donnée du centre, d'après le profil des bas-côtés */
