@@ -2,9 +2,12 @@
 'use strict';
 
 /* ================= Boucle ================= */
-let lastT = 0;
+let lastT = 0, dtSmooth = 0;
 function frame(t) {
-  const raw = Math.min(0.05, Math.max(0, (t - lastT) / 1000));
+  const raw0 = Math.min(0.05, Math.max(0, (t - lastT) / 1000));
+  // pas de temps lissé : les petites irrégularités du navigateur ne font plus « sauter » la voiture
+  dtSmooth = dtSmooth ? dtSmooth + (raw0 - dtSmooth) * 0.25 : raw0;
+  const raw = Math.abs(raw0 - dtSmooth) > 0.02 ? raw0 : dtSmooth;
   // ralenti bref après un accident
   if (slowmoT > 0) slowmoT -= raw; else timeScale += (1 - timeScale) * Math.min(1, raw * 4);
   const dt = raw * timeScale;

@@ -41,8 +41,31 @@ function endRace() {
   setTimeout(() => { if (state === 'over') { show('over'); $('#againBtn').focus({ preventScroll: true }); } }, 900);
   $('#hud').hidden = false;
 }
-function pauseGame() { if (state !== 'play' || mode !== 'solo') return; state = 'pause'; show('pause'); $('#resumeBtn').focus({ preventScroll: true }); }
-function resumeGame() { if (state !== 'pause') return; state = 'play'; for (const k in input) input[k] = false; show(null); lastT = performance.now(); }
+/* menu en course : réglages + quitter. En solo la course est en pause ; en duel elle continue. */
+function pauseGame() {
+  if (state !== 'play' && state !== 'count') return;
+  if (mode === 'solo' && state === 'play') state = 'pause';
+  for (const k in input) input[k] = false;
+  $('#pauseEyebrow').textContent = mode === 'duel' ? 'Le duel continue pendant que tu règles' : 'Course en pause';
+  $('#restartBtn').hidden = mode === 'duel';
+  $('#quitBtn').textContent = mode === 'duel' ? 'Quitter le duel' : 'Quitter la course';
+  renderSettings(); show('pause'); $('#resumeBtn').focus({ preventScroll: true });
+}
+function resumeGame() {
+  if (screens.pause.hidden) return;
+  if (state === 'pause') state = 'play';
+  for (const k in input) input[k] = false; show(null); lastT = performance.now();
+}
+function renderSettings() {
+  for (const b of $('#setCam').children) b.setAttribute('aria-pressed', String(+b.dataset.v === camMode));
+  for (const b of $('#setGfx').children) b.setAttribute('aria-pressed', String(b.dataset.v === quality));
+  for (const b of $('#setSnd').children) b.setAttribute('aria-pressed', String((b.dataset.v === 'off') === muted));
+}
+for (const b of $('#setCam').children) b.addEventListener('click', () => { while (camMode !== +b.dataset.v) cycleCamera(); renderSettings(); });
+for (const b of $('#setGfx').children) b.addEventListener('click', () => { if (quality !== b.dataset.v) setQuality(b.dataset.v, true); renderSettings(); });
+for (const b of $('#setSnd').children) b.addEventListener('click', () => { audioInit(); setMuted(b.dataset.v === 'off'); renderSettings(); });
+$('#restartBtn').addEventListener('click', () => { if (mode === 'solo') startRace(); });
+$('#menuBtnHud').addEventListener('click', (e) => { e.currentTarget.blur(); if (!screens.pause.hidden) resumeGame(); else pauseGame(); });
 function toMenu() {
   raceStartWall = 0; leaveRoom(); mode = 'solo'; showCount(null); state = 'menu'; resetRace('menu', 7); show('menu');
   $('#best').textContent = best ? best.toLocaleString('fr-FR') : '—'; $('#myCarName').textContent = myCar.name; $('#startBtn').focus({ preventScroll: true });
@@ -232,7 +255,7 @@ addEventListener('keydown', (e) => {
     cycleCar(e.code === 'ArrowRight' ? 1 : -1);
     e.preventDefault(); return;
   }
-  if (e.code === 'KeyP' || e.code === 'Escape') { if (state === 'play') pauseGame(); else if (state === 'pause') resumeGame(); e.preventDefault(); }
+  if (e.code === 'KeyP' || e.code === 'Escape') { if (!screens.pause.hidden) resumeGame(); else if (state === 'play' || state === 'count') pauseGame(); e.preventDefault(); }
   else if (e.code === 'KeyM') { audioInit(); setMuted(!muted); }
   else if (e.code === 'KeyC') cycleCamera();
   else if (e.code === 'Enter' && ((state === 'menu' && !screens.menu.hidden) || (state === 'over' && overTimer > 1)) && document.activeElement === document.body) {

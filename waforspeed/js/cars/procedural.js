@@ -380,18 +380,32 @@ function setupReflections() {
   for (const m of envUsers()) { m.envMap = cubeRT.texture; m.needsUpdate = true; }
   MAT.env = cubeRT.texture;
 }
+/* Reflets : une seule face du cube par image (6 images pour un cube complet), au lieu de 6 rendus
+   d'un coup toutes les 4 images (à-coups visibles). Coût constant et faible → animation fluide. */
+let cubeFace = 0;
 function updateReflections(at, hideObj) {
   if (!cubeCam || quality !== 'high') return;
-  if (++cubeTick % (isTouch ? 10 : 4) !== 0) return;
+  if (isTouch && (++cubeTick % 2)) return;   // mobile : une face toutes les 2 images
   const write = cubeRTs[cubeW], read = cubeRTs[1 - cubeW];
-  cubeCam.renderTarget = write;
-  cubeCam.position.set(at.x, at.y + 0.9, at.z);
+  if (cubeFace === 0) cubeCam.position.set(at.x, at.y + 0.9, at.z);
+  cubeCam.updateMatrixWorld(true);
+  const cam = cubeCam.children[cubeFace];
+  if (cam.far !== 320) { for (const c of cubeCam.children) { c.far = 320; c.updateProjectionMatrix(); } }
   if (hideObj) hideObj.visible = false;
-  cubeCam.update(renderer, state === 'garage' ? gScene : scene);
+  const prevRT = renderer.getRenderTarget(), prevXr = renderer.xr.enabled;
+  renderer.xr.enabled = false;
+  write.texture.generateMipmaps = false;
+  if (cubeFace === 5) write.texture.generateMipmaps = true;
+  renderer.setRenderTarget(write, cubeFace);
+  renderer.render(state === 'garage' ? gScene : scene, cam);
+  renderer.setRenderTarget(prevRT); renderer.xr.enabled = prevXr;
   if (hideObj) hideObj.visible = true;
-  // les matériaux lisent désormais la texture fraîche ; la prochaine fois on écrira dans l'autre
-  for (const m of envUsers()) if (m.envMap === read.texture) m.envMap = write.texture;
-  cubeRT = write; MAT.env = write.texture; cubeW = 1 - cubeW;
+  cubeFace = (cubeFace + 1) % 6;
+  if (cubeFace === 0) {
+    // cube complet : les matériaux lisent la texture fraîche ; la prochaine fois on écrira dans l'autre
+    for (const m of envUsers()) if (m.envMap === read.texture) m.envMap = write.texture;
+    cubeRT = write; MAT.env = write.texture; cubeW = 1 - cubeW;
+  }
 }
 function makeCarMaterials() {
   MAT.env = makeEnv();

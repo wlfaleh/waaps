@@ -84,10 +84,39 @@ const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), tmpA = {}, tm
 let camInit = false, fovNow = 62;
 /* trois vues : proche (par défaut), loin, capot */
 const CAM_MODES = [
-  { id: 'proche', name: 'Proche', dist: 4.8, h: 1.35, ahead: 7, lookH: 0.8, fov: 60 },
+  { id: 'proche', name: 'Proche', dist: 4.6, h: 1.28, ahead: 7, lookH: 0.78, fov: 58 },
   { id: 'loin', name: 'Loin', dist: 8, h: 2.5, ahead: 14, lookH: 0.9, fov: 62 },
-  { id: 'capot', name: 'Capot', hood: true, fov: 70 }
+  { id: 'capot', name: 'Cockpit', hood: true, cockpit: true, fov: 72 }
 ];
+let camHd = 0, camDistDyn = 0;
+const _eye = new THREE.Vector3(), _fwd = new THREE.Vector3();
+/* vue cockpit : tableau de bord, montants de pare-brise et volant qui tourne (attachés à la caméra) */
+let cockpit = null;
+function buildCockpit() {
+  if (cockpit) return cockpit;
+  const g = new THREE.Group(), dark = new THREE.MeshStandardMaterial({ color: 0x2a2c33, roughness: 0.7, metalness: 0.15 });
+  const leather = new THREE.MeshStandardMaterial({ color: 0x23242a, roughness: 0.5, metalness: 0.1, emissive: 0x08090c });
+  const alu = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.3, metalness: 0.9 });
+  const dash = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.3, 1.1), dark); dash.position.set(0.32, -0.66, -0.9); dash.rotation.x = 0.16; g.add(dash);
+  const hood2 = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.12, 0.3), dark); hood2.position.set(0, -0.43, -0.8); g.add(hood2);
+  for (const [x, rz] of [[-1.12, -0.1], [1.78, 0.1]]) { const pil = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.3, 0.05), dark); pil.position.set(x, 0.05, -0.85); pil.rotation.set(-0.55, 0, rz); g.add(pil); }
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.08, 0.5), dark); roof.position.set(0.32, 0.56, -0.5); g.add(roof);
+  // compteur : fond lumineux et aiguille
+  const gauge = new THREE.Mesh(new THREE.CircleGeometry(0.1, 32), new THREE.MeshBasicMaterial({ color: 0x0b1a22 })); gauge.position.set(0, -0.33, -0.93); g.add(gauge);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.095, 0.104, 40), new THREE.MeshBasicMaterial({ color: 0x00e5ff })); ring.position.set(0, -0.33, -0.929); g.add(ring);
+  const needle = new THREE.Mesh(new THREE.PlaneGeometry(0.008, 0.085), new THREE.MeshBasicMaterial({ color: 0xff6a00 })); needle.geometry.translate(0, 0.04, 0); needle.position.set(0, -0.33, -0.928); g.add(needle);
+  // volant : jante, trois branches, moyeu ; tourne autour de son axe
+  const wheel = new THREE.Group(); wheel.position.set(0, -0.47, -0.62); wheel.rotation.x = -0.28; wheel.scale.setScalar(0.88);
+  wheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.022, 10, 40), leather));
+  for (const a of [0, Math.PI * 0.62, -Math.PI * 0.62]) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.17, 0.018), alu); sp.geometry.translate(0, -0.085, 0); sp.rotation.z = a; wheel.add(sp); }
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.04, 20), leather); hub.rotation.x = Math.PI / 2; wheel.add(hub);
+  const mark = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.025), new THREE.MeshBasicMaterial({ color: 0xff6a00 })); mark.position.set(0, 0.19, 0); wheel.add(mark);
+  g.add(wheel);
+  g.userData = { wheel, needle };
+  g.visible = false;
+  camera.add(g); scene.add(camera);
+  cockpit = g; return g;
+}
 let camMode = Math.max(0, CAM_MODES.findIndex((m) => m.id === store('waforspeed-cam')));
 function cycleCamera() {
   camMode = (camMode + 1) % CAM_MODES.length;
@@ -100,27 +129,43 @@ function updateCamera(dt, sP) {
   const car = playerMesh.position;
   // la caméra suit en partie l'orientation de la voiture : dans les virages on voit son flanc
   // pendant un tête-à-queue la caméra ne suit qu'un peu la rotation (elle reste derrière la route)
-  const hd = tmpA.th + playerYaw * (C.hood ? 1 : 0.45) + spinYaw * (C.hood ? 1 : 0.2);
+  // la caméra suit le cap de la voiture AVEC UN RETARD : quand on tourne, la voiture pivote d'abord
+  // dans l'image (on voit son flanc), puis la caméra la rattrape → mouvement vivant, pas une image collée
+  const hdT = tmpA.th + playerYaw + spinYaw * (C.hood ? 1 : 0.15);
+  if (!camInit) { camHd = hdT; camDistDyn = C.dist || 0; }
+  let dh = hdT - camHd; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+  camHd += dh * Math.min(1, dt * (C.hood ? 40 : 3.4));
+  const hd = camHd;
   const fx = Math.sin(hd), fz = -Math.cos(hd), rx = Math.cos(hd), rz = Math.sin(hd);
   let desired, look;
-  if (C.hood) {
-    desired = new THREE.Vector3(car.x + fx * 1.5, car.y + 1.08, car.z + fz * 1.5);
-    look = new THREE.Vector3(car.x + fx * 30, car.y + 0.9, car.z + fz * 30);
+  if (C.cockpit) {
+    // œil du conducteur (à gauche), lié à la carrosserie : on ressent roulis, tangage et suspension
+    const inner = playerMesh.userData.inner, d = myCar.d;
+    inner.localToWorld(_eye.set(-0.36, d.H * 0.74, -d.L * 0.02));
+    inner.localToWorld(_fwd.set(-0.36, d.H * 0.66, -d.L * 0.02 - 30));
+    desired = _eye.clone(); look = _fwd.clone();
   } else {
-    const dist = C.dist * (portrait ? 0.92 : 1) + p * 0.5, side = -steer * 0.8 * Math.min(1, p * 2);
-    desired = new THREE.Vector3(car.x - fx * dist + rx * side, car.y + C.h * (portrait ? 1.08 : 1) + p * 0.15, car.z - fz * dist + rz * side);
+    // distance : la voiture s'éloigne quand elle accélère, se rapproche au freinage
+    const distT = C.dist * (portrait ? 0.92 : 1) + p * 0.6 + clamp(lonAcc * 0.05, -0.4, 0.6);
+    camDistDyn += (distT - camDistDyn) * Math.min(1, dt * 2.5);
+    const dist = camDistDyn, side = -steer * 0.35 * Math.min(1, p * 2);
+    desired = new THREE.Vector3(car.x - fx * dist + rx * side, car.y + C.h * (portrait ? 1.08 : 1) + p * 0.12, car.z - fz * dist + rz * side);
     const ground = trackPoint(sP - dist / M, playerX * RW, tmpB).y + 0.6;
     if (desired.y < ground) desired.y = ground;   // jamais sous la route dans les côtes
-    // regarde à moitié devant la voiture, à moitié le long de la route : on voit venir les virages
+    // regarde la voiture et un peu le virage qui arrive
     const ahead = trackPoint(sP + C.ahead * 1.6 / M, playerX * RW, tmpB);
-    look = new THREE.Vector3((car.x + fx * C.ahead) * 0.55 + ahead.x * 0.45, car.y + C.lookH, (car.z + fz * C.ahead) * 0.55 + ahead.z * 0.45);
+    look = new THREE.Vector3((car.x + fx * C.ahead) * 0.6 + ahead.x * 0.4, car.y + C.lookH, (car.z + fz * C.ahead) * 0.6 + ahead.z * 0.4);
   }
-  const k = camInit ? 1 - Math.exp(-dt * (C.hood ? 30 : 9)) : 1;
-  camPos.lerp(desired, k); camLook.lerp(look, camInit ? 1 - Math.exp(-dt * 14) : 1); camInit = true;
+  const k = camInit ? 1 - Math.exp(-dt * (C.hood ? 60 : 14)) : 1;
+  camPos.lerp(desired, k); camLook.lerp(look, camInit ? 1 - Math.exp(-dt * (C.hood ? 60 : 16)) : 1); camInit = true;
+  // volant et compteur de la vue cockpit
+  const ck = buildCockpit(); ck.visible = !!C.cockpit;
+  if (C.cockpit) { ck.userData.wheel.rotation.z += (-steer * 2.3 - ck.userData.wheel.rotation.z) * Math.min(1, dt * 14); ck.userData.needle.rotation.z = 2.2 - Math.min(Math.abs(kmh()), 300) / 300 * 4.4; }
   camera.position.copy(camPos);
   if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - 0.5) * shake * 0.6, (Math.random() - 0.5) * shake * 0.4, 0));
   camera.lookAt(camLook);
-  camera.rotateZ(-steer * (C.hood ? 0.015 : 0.02) - (reduceMotion ? 0 : clamp(latAcc * 0.0018, -0.03, 0.03)));
+  if (!C.cockpit) camera.rotateZ(-steer * 0.015 - (reduceMotion ? 0 : clamp(latAcc * 0.0018, -0.03, 0.03)));
+  else camera.rotateZ(playerMesh.userData.inner.rotation.z * -0.6);
   // vibration légère à très haute vitesse (sensation de vitesse)
   if (!reduceMotion && p > 0.75) { const k = (p - 0.75) * (nitroOn ? 0.02 : 0.01); camera.position.x += Math.sin(performance.now() * 0.05) * k; camera.position.y += Math.sin(performance.now() * 0.071) * k; }
   const fov = C.fov + (portrait ? 5 : 0) + Math.min(p, 1.3) * 7 + (nitroOn ? 6 : 0);
