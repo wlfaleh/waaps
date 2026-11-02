@@ -26,15 +26,28 @@ function getLoader(file) {
   }
   return Promise.resolve(THREE.GLTFLoader ? new THREE.GLTFLoader() : null);
 }
-/* Chargement progressif : une voiture à la fois, la voiture du joueur d'abord.
-   Sur ordinateur, toutes les voitures suivent en arrière-plan ; sur mobile, seulement
-   celles qu'on affiche (garage, adversaire du duel), pour ne pas tout télécharger. */
+/* Chargement progressif : une voiture à la fois, la voiture du joueur d'abord,
+   puis les versions « trafic » légères (LOD, ~1 Mo chacune) de toutes les voitures, même sur mobile.
+   Sur ordinateur, les modèles complets suivent en arrière-plan ; sur mobile, seulement
+   ceux qu'on affiche (garage, adversaire du duel), pour ne pas tout télécharger. */
 const modelQueue = [];
 let modelBusy = false;
+/* LOD trafic : fichier <dossier>/<nom>-lod.json à côté du modèle (créé par scripts/make-lod.mjs du skill).
+   Rien à déclarer dans le catalogue : s'il manque, le trafic garde l'ancien comportement. */
+const lodModels = new Map();   // id -> { root, repaint, tris, far, wheelRx, lod: true }
+const lodStatus = new Map();   // id -> 'none' | 'loading' | 'ok' | 'error'
+const lodPathOf = (file) => file.replace(/\.[^./]+$/, '') + '-lod.json';
 function loadRealModels() {
-  for (const car of CARS) modelStatus.set(car.id, 'none');
+  for (const car of CARS) { modelStatus.set(car.id, 'none'); lodStatus.set(car.id, 'none'); }
   requestModel(myCar.id);
+  for (const car of CARS) requestLod(car.id);
   if (!isTouch) for (const car of CARS) requestModel(car.id, true);
+}
+function requestLod(id) {
+  const spec = CAR_MODELS[id];
+  if (!spec || !spec.file || lodStatus.get(id) !== 'none' || modelQueue.includes('lod:' + id)) return;
+  modelQueue.push('lod:' + id);
+  nextModel();
 }
 function requestModel(id, later) {
   const spec = CAR_MODELS[id];
@@ -46,7 +59,9 @@ function requestModel(id, later) {
 }
 function nextModel() {
   if (modelBusy || !modelQueue.length) return;
-  const car = carById(modelQueue.shift()), spec = CAR_MODELS[car.id];
+  const item = modelQueue.shift();
+  if (item.startsWith('lod:')) { loadLod(carById(item.slice(4))); return; }
+  const car = carById(item), spec = CAR_MODELS[car.id];
   modelBusy = true;
   modelStatus.set(car.id, 'loading');
   if (state === 'garage') renderGarageUI();
@@ -69,6 +84,35 @@ function nextModel() {
       done();
     }, undefined, fail);
   }).catch(fail);
+}
+
+function loadLod(car) {
+  const spec = CAR_MODELS[car.id];
+  modelBusy = true;
+  lodStatus.set(car.id, 'loading');
+  const done = (ok) => { lodStatus.set(car.id, ok ? 'ok' : 'error'); modelBusy = false; if (ok) onLodReady(car); nextModel(); };
+  if (!THREE.GLTFLoader) { done(false); return; }
+  new THREE.GLTFLoader().load(lodPathOf(spec.file), (res) => {
+    try { lodModels.set(car.id, prepareLod(res.scene, car)); } catch (e) { console.info('LOD trafic illisible pour ' + car.name, e); done(false); return; }
+    done(true);
+  }, undefined, () => done(false));   // pas de LOD : repli (vrai modèle complet ou voiture procédurale)
+}
+/* Le LOD est déjà en mètres, avant vers −Z et posé au sol : mêmes règles que les vrais modèles
+   (prepareModel : échelle sur d.L, roues, peinture, feux), avec les noms de pièces fixés par make-lod.mjs.
+   La silhouette lointaine « wfs_far » est mise de côté (1 seul maillage, couleurs par sommet). */
+const LOD_SPEC = { rotateY: 0, paint: '^wfs_paint$', tail: '^wfs_tail', wheel: '^wfs_wheel' };
+function prepareLod(scene, car) {
+  const far = scene.getObjectByName('wfs_far');
+  if (far) far.parent.remove(far);
+  const R = prepareModel(scene, car, LOD_SPEC);
+  if (far && far.geometry) {
+    scene.updateMatrix(); far.updateMatrix();
+    far.geometry.applyMatrix4(new THREE.Matrix4().multiplyMatrices(scene.matrix, far.matrix));
+    far.geometry.computeBoundingSphere();
+    R.far = far.geometry;
+  }
+  R.wheelRx = new RegExp(LOD_SPEC.wheel, 'i'); R.lod = true;
+  return R;
 }
 
 /* Boîte englobante exacte (sommet par sommet). Box3.setFromObject de three r128 transforme la boîte
@@ -161,8 +205,9 @@ function repaintMat(m, hex) {
 const realInTraffic = (R) => quality === 'high' && !isTouch && R.tris < 120000;
 
 function realBody(car, paintHex, opts) {
-  const R = realModels.get(car.id);
-  if (!R || (opts.traffic && !realInTraffic(R))) return null;
+  const L = opts.traffic ? lodModels.get(car.id) : null;
+  const R = L || realModels.get(car.id);
+  if (!R || (opts.traffic && !L && !realInTraffic(R))) return null;
   const obj = R.root.clone(true);
   const tails = [];
   obj.traverse((o) => {
@@ -175,9 +220,9 @@ function realBody(car, paintHex, opts) {
     });
     o.material = arr ? mats : mats[0];
   });
-  const { wheels, rw } = rigWheels(obj, car, !opts.traffic);
+  const { wheels, rw } = rigWheels(obj, car, !opts.traffic, R.wheelRx);
   return {
-    object: obj, wheels, rw, lampY: R.lampY, headY: R.headY,
+    object: obj, wheels, rw, lampY: R.lampY, headY: R.headY, lod: !!R.lod,
     setBrake: (on) => { for (const t of tails) if (t.emissive) { t.emissive.set(0xff2040); t.emissiveIntensity = on ? 2.5 : 0.4; } }
   };
 }
@@ -270,9 +315,9 @@ const WHEEL_RX = /(wheel|roue|tire|tyre|pneu|(^|[^a-z])rim([^a-z]|$))/i;   // «
 /* Roues d'un vrai modèle : on repère les morceaux de roue (nom contenant wheel, roue, tire, rim…),
    on les regroupe par coin de la voiture, puis chaque roue est accrochée à un pivot (braquage)
    et à un axe (rotation). Les étriers et le reste ne bougent pas. */
-function rigWheels(obj, car, withBlur) {
+function rigWheels(obj, car, withBlur, rxOver) {
   const spec = CAR_MODELS[car.id] || {};
-  const rx = spec.wheel ? new RegExp(spec.wheel, 'i') : WHEEL_RX;
+  const rx = rxOver || (spec.wheel ? new RegExp(spec.wheel, 'i') : WHEEL_RX);
   obj.updateMatrixWorld(true);
   const groups = new Map();
   obj.traverse((o) => {
@@ -322,6 +367,8 @@ function makeCarMesh(car, paintHex, opts = {}) {
   const inner = new THREE.Group();
   inner.add(body.object);
   body.object.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = !o.material.isMeshBasicMaterial; } });
+  // LOD du trafic : seules la carrosserie et la peinture projettent une ombre (moins d'appels dans la passe d'ombre)
+  if (real && real.lod) body.object.traverse((o) => { if (o.isMesh) { o.castShadow = o.material.userData.wfs === 'paint' || o.material.name === 'wfs_body'; o.receiveShadow = false; } });
   g.add(inner);
   const sh = new THREE.Mesh(shadowGeo, MAT.shadow);
   sh.scale.set(Wd * 1.5, 1, L * 1.25); sh.position.y = 0.02; g.add(sh);
@@ -438,11 +485,58 @@ function makeCarLow(car, paintHex) {
   return g;
 }
 
+/* Trafic lointain issu du LOD : silhouette du vrai modèle en 1 maillage (≈1 800 triangles, 1 appel de dessin).
+   Position, normales et index partagés entre toutes les couleurs ; seule la couleur par sommet change.
+   La nuit, les feux (attribut _lamp) s'allument par le matériau (uniforme farLampU), sans sprite. */
+const farGeoCache = new Map();
+const farLampU = { value: 0 };
+function makeCarFar(car, paintHex) {
+  const L = lodModels.get(car.id);
+  if (!L || !L.far) return null;
+  const key = car.id + paintHex;
+  if (!farGeoCache.has(key)) {
+    const b = L.far, src = b.attributes.color, paint = b.attributes._paint, pc = new THREE.Color(paintHex);
+    const n = b.attributes.position.count, col = new Float32Array(n * 3), k = src && src.normalized ? 1 / 255 : 1;
+    for (let i = 0; i < n; i++) {
+      const isPaint = paint && paint.getX(i) > 0.5;
+      col[i * 3] = isPaint ? pc.r : src ? src.getX(i) * k : 0.2; col[i * 3 + 1] = isPaint ? pc.g : src ? src.getY(i) * k : 0.2; col[i * 3 + 2] = isPaint ? pc.b : src ? src.getZ(i) * k : 0.2;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setIndex(b.index); g.setAttribute('position', b.attributes.position); g.setAttribute('normal', b.attributes.normal);
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('wfsLamp', b.attributes._lamp || new THREE.BufferAttribute(new Float32Array(n), 1));
+    g.boundingSphere = b.boundingSphere;
+    farGeoCache.set(key, g);
+  }
+  if (!MAT.carFar) {
+    MAT.carFar = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.25, envMap: MAT.env, envMapIntensity: 0.4 });
+    MAT.carFar.onBeforeCompile = (sh) => {
+      sh.uniforms.uLampGlow = farLampU;
+      sh.vertexShader = 'attribute float wfsLamp;\nvarying float vLamp;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vLamp = wfsLamp;');
+      sh.fragmentShader = 'uniform float uLampGlow;\nvarying float vLamp;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += vColor * vLamp * uLampGlow;');
+    };
+    MAT.carFar.customProgramCacheKey = () => 'wfs-car-far';
+    envMats.add(MAT.carFar);
+  }
+  const g = new THREE.Group();
+  g.rotation.order = 'YXZ';
+  const inner = new THREE.Group();
+  inner.add(new THREE.Mesh(farGeoCache.get(key), MAT.carFar));
+  g.add(inner);
+  g.userData = { inner, len: car.d.L, far: true, tailGlow: { visible: true }, setBrake: () => {}, setLights: () => {}, setIndicators: () => {}, animWheels: () => {} };
+  return g;
+}
+/* Une version trafic vient d'arriver : les voitures de ce modèle déjà affichées sont reconstruites. */
+function onLodReady(car) {
+  if (typeof cars === 'undefined') return;
+  for (const c of cars) if (CARS[c.type] === car) { if (c.mesh) scene.remove(c.mesh); if (c.lowMesh) scene.remove(c.lowMesh); c.mesh = null; c.lowMesh = null; }
+}
+
 /* Un vrai modèle vient d'arriver : on remplace les voitures provisoires déjà affichées. */
 function onModelReady(car) {
   if (myCar.id === car.id) buildPlayer();
   if (state === 'garage') { if (myCar.id === car.id) setGarageCar(); renderGarageUI(); }
-  for (const c of cars) if (c.mesh && CARS[c.type] === car) { scene.remove(c.mesh); c.mesh = null; }
+  if (!lodModels.has(car.id)) for (const c of cars) if (c.mesh && CARS[c.type] === car) { scene.remove(c.mesh); c.mesh = null; }
   for (const [peer, gm] of ghostMeshes) if (gm.car === car.id) { scene.remove(gm.mesh); ghostMeshes.delete(peer); }
 }
 function modelNote(car) {
