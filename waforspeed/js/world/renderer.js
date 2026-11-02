@@ -111,6 +111,11 @@ function makeTextures() {
     }
     g.fillStyle = '#55524e'; g.fillRect(0, 496, 16, 16);
     TEXS.facadeDay = canvasTex(c, true);
+    // rugosité (vert) / métal (bleu) de la même façade : vitres lisses qui reflètent le ciel, murs mats
+    const [c2, g2] = makeCanvas(512, 512);
+    g2.fillStyle = 'rgb(0,235,0)'; g2.fillRect(0, 0, 512, 512);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { g2.fillStyle = 'rgb(0,18,40)'; g2.fillRect(x * 32 + 5, y * 32 + 6, 22, 20); }
+    TEXS.facadeRM = canvasTex(c2, true);
   }
   // route de jour : asphalte sec, sans flaques
   {
@@ -295,8 +300,12 @@ function setupThree() {
   MAT.side = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0.05, map: TEXS.detail });
   MAT.walk = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.02, map: TEXS.paving });
   MAT.road.normalMap = TEXS.roadNormal; MAT.road.normalScale = new THREE.Vector2(0.55, 0.55);
+  roadShader(MAT.road);
   MAT.bld = new THREE.MeshBasicMaterial({ map: TEXS.facade, vertexColors: true });
-  MAT.bldDay = new THREE.MeshLambertMaterial({ map: TEXS.facadeDay, vertexColors: true });
+  MAT.bldDayLow = new THREE.MeshLambertMaterial({ map: TEXS.facadeDay, vertexColors: true });
+  // qualité haute : façade PBR, les vitres reflètent le ciel (carte d'environnement PMREM)
+  MAT.bldDayHigh = new THREE.MeshStandardMaterial({ map: TEXS.facadeDay, vertexColors: true, roughnessMap: TEXS.facadeRM, metalnessMap: TEXS.facadeRM, roughness: 1, metalness: 1, envMapIntensity: 1, color: 0xd8d8d8 });
+  MAT.bldDay = MAT.bldDayLow;
   MAT.ads = TEXS.ads.map((t) => new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }));
   MAT.neon = new THREE.MeshBasicMaterial({ vertexColors: true });
   MAT.pool = new THREE.MeshBasicMaterial({ map: TEXS.radial, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -307,6 +316,7 @@ function setupThree() {
 
   hemi = new THREE.HemisphereLight(0x46327a, 0x08080e, 0.75); scene.add(hemi);
   sunLight = new THREE.DirectionalLight(0x8a96ff, 0.35); sunLight.position.set(-40, 80, 30); scene.add(sunLight); scene.add(sunLight.target);
+  stableShadow(sunLight);
   lampLights = [];
   for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0xffb46b, 1.1, 26, 2); scene.add(l); lampLights.push(l); }
 
@@ -367,13 +377,13 @@ function makeSkyMaterial() {
     uniforms: {
       uTop: { value: new THREE.Color('#2a64b8') }, uMid: { value: new THREE.Color('#74ace0') }, uHor: { value: new THREE.Color('#d4e6f2') },
       uSun: { value: new THREE.Vector3(-0.45, 0.75, -0.5).normalize() }, uSunCol: { value: new THREE.Color('#fff0d4') },
-      uCloud: { value: 1 }, uCover: { value: 0.5 }, uTime: { value: 0 }, uNight: { value: 0 }
+      uCloud: { value: 1 }, uCover: { value: 0.5 }, uTime: { value: 0 }, uNight: { value: 0 }, uFog: { value: new THREE.Color('#c4d8e8') }
     },
     vertexShader: 'varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `
       precision mediump float;
       varying vec3 vDir;
-      uniform vec3 uTop, uMid, uHor, uSun, uSunCol; uniform float uCloud, uCover, uTime, uNight;
+      uniform vec3 uTop, uMid, uHor, uSun, uSunCol, uFog; uniform float uCloud, uCover, uTime, uNight;
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
         return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
@@ -396,7 +406,12 @@ function makeSkyMaterial() {
           if (uNight > 0.5) cc = mix(uMid, uHor, 0.5) * 0.9;
           col = mix(col, cc, c * uCloud);
         }
+        // atmosphère : l'horizon se fond dans le brouillard, voile chaud du côté du soleil
+        float haze = 1.0 - smoothstep(-0.03, 0.14, h);
+        col = mix(col, uFog, haze * 0.65);
+        col += uSunCol * pow(mu, 3.0) * haze * 0.14 * (1.0 - uNight);
         gl_FragColor = vec4(col, 1.0);
+        #include <encodings_fragment>
       }`
   });
 }
@@ -415,6 +430,8 @@ function applyEnv() {
   U.uTop.value.set(E.skyTop); U.uMid.value.set(E.skyMid); U.uHor.value.set(E.skyHor);
   U.uSun.value.set(E.sunDir[0], E.sunDir[1], E.sunDir[2]).normalize(); U.uSunCol.value.set(E.sunColor);
   U.uCloud.value = E.clouds ? 1 : E.nightClouds || 0; U.uCover.value = E.cloudCover || 0.5; U.uNight.value = TOD === 'nuit' ? 1 : 0;
+  U.uFog.value.set(E.fog);
+  const envTex = updateSkyEnv(E);   // reflets et lumière ambiante du ciel (qualité haute)
   const sk = TEXS.skylines[MAP.skyline + '-' + TOD] || TEXS.skyline;
   sk.repeat.set(4, 1);
   skyline.material.map = sk; skyline.material.needsUpdate = true;
@@ -426,29 +443,206 @@ function applyEnv() {
   if (shadows) {
     const s = sunLight.shadow, sz = isTouch ? 1024 : 2048;
     if (s.mapSize.x !== sz) { s.mapSize.set(sz, sz); if (s.map) { s.map.dispose(); s.map = null; } }
-    Object.assign(s.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 260 });
+    Object.assign(s.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 260 });
     s.camera.updateProjectionMatrix();
-    s.bias = -0.0004; s.normalBias = 0.04; s.radius = 3;
+    s.bias = -0.0003; s.normalBias = 0.035; s.radius = 3;
   }
   MAT.shadow.opacity = shadows ? 0.35 : 0.75;
   sunDisc.visible = E.sunDisc; moonDisc.visible = E.moon; stars.visible = E.stars; clouds.visible = false;   // nuages dessinés dans le ciel
   water.visible = MAP.ground === 'beach'; water.material.color.set(E.water);
+  water.material.envMap = envTex; water.material.envMapIntensity = 1; water.material.needsUpdate = true;
   MAT.road.map = MAP.road === 'circuit' ? TEXS.roadCircuit : TOD === 'jour' ? TEXS.roadDay : TEXS.road;
   const wet = TOD === 'nuit' && (MAP.ground === 'city' || MAP.ground === 'beach');
-  MAT.road.roughness = wet ? 0.2 : 0.62; MAT.road.metalness = wet ? 0.45 : 0.1;
-  MAT.road.envMap = wet && cubeRT ? cubeRT.texture : null; MAT.road.envMapIntensity = 0.85;
+  MAT.road.roughness = wet ? 0.22 : 0.66; MAT.road.metalness = wet ? 0.4 : 0.05;
+  // chaussée mouillée : reflets temps réel (néons, phares) ; sèche : reflet doux du ciel
+  MAT.road.envMap = wet && cubeRT ? cubeRT.texture : envTex; MAT.road.envMapIntensity = wet ? 0.95 : 0.2;
+  RU.wet.value = wet && quality === 'high' ? 1 : 0;
   MAT.road.needsUpdate = true;
+  // sol, trottoirs et façades de jour : même environnement que le ciel
+  for (const m of [MAT.side, MAT.walk]) { m.envMap = envTex; m.envMapIntensity = E.envK; m.needsUpdate = true; }
+  MAT.bldDay = quality === 'high' ? MAT.bldDayHigh : MAT.bldDayLow;
+  MAT.bldDayHigh.envMap = envTex; MAT.bldDayHigh.envMapIntensity = E.glassK; MAT.bldDayHigh.needsUpdate = true;
   MAT.neon.color.setScalar(E.neonK);
   MAT.pool.opacity = E.poolK;
   for (const l of lampLights) l.visible = E.lamps;
 }
+/* ================= Lookdev : route, ombres, environnement, étalonnage ================= */
+const RU = { wet: { value: 0 } };   // uniforms partagés de la route
+/* Route PBR : rugosité variable (usure, traces de roues), réparations plus sombres, flaques miroir la nuit sous la pluie.
+   Bruit calculé en coordonnées monde : pas de motif répété malgré la texture qui se répète tous les 9 m. */
+function roadShader(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uWet = RU.wet;
+    sh.vertexShader = 'varying vec3 vRoadW;\n' + sh.vertexShader.replace('#include <worldpos_vertex>',
+      '#include <worldpos_vertex>\n vRoadW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = `varying vec3 vRoadW; uniform float uWet;
+      float rh12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+      float rnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(rh12(i), rh12(i + vec2(1.0, 0.0)), f.x), mix(rh12(i + vec2(0.0, 1.0)), rh12(i + vec2(1.0, 1.0)), f.x), f.y); }
+      ` + sh.fragmentShader
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        float rn = rnoise(vRoadW.xz * 0.11) * 0.62 + rnoise(vRoadW.xz * 0.43 + 7.0) * 0.38;
+        float lane = fract(vUv.x * 3.0);
+        float trk = exp(-pow((lane - 0.3) * 13.0, 2.0)) + exp(-pow((lane - 0.7) * 13.0, 2.0));
+        float puddle = smoothstep(0.6, 0.7, rn - trk * 0.08) * uWet;
+        diffuseColor.rgb *= (0.9 + 0.2 * rnoise(vRoadW.xz * 0.031 + 3.0)) * (1.0 - trk * 0.07) * mix(1.0, 0.5, puddle);
+        roughnessFactor = clamp(roughnessFactor * (0.8 + rn * 0.4) - trk * 0.08, 0.04, 1.0);
+        roughnessFactor = mix(roughnessFactor, 0.02, puddle);`)
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n normal = normalize(mix(normal, geometryNormal, puddle));');
+  };
+  mat.customProgramCacheKey = () => 'wfsRoad';
+}
+
+/* Ombre stable : la boîte d'ombre est décalée vers l'avant (on voit ce qui arrive, pas ce qui est derrière)
+   et calée sur la grille des texels de la carte d'ombre, ce qui supprime le scintillement des bords en roulant. */
+const SHADOW_AHEAD = 20;
+const _shA = new THREE.Vector3(), _shB = new THREE.Vector3(), _shC = new THREE.Vector3(), _shM = new THREE.Matrix4();
+function stableShadow(light) {
+  const sh = light.shadow;
+  sh.updateMatrices = function (l) {
+    const cam = this.camera;
+    _shA.setFromMatrixPosition(l.target.matrixWorld);                     // centre (la voiture)
+    _shB.setFromMatrixPosition(l.matrixWorld).sub(_shA);                  // vers la lumière
+    if (camera) { camera.getWorldDirection(_shC); _shC.y = 0; if (_shC.lengthSq() > 1e-6) _shA.addScaledVector(_shC.normalize(), SHADOW_AHEAD); }
+    cam.position.copy(_shA).add(_shB); cam.lookAt(_shA); cam.updateMatrixWorld();
+    // calage sur les texels
+    const texel = (cam.right - cam.left) / this.mapSize.x;
+    _shC.copy(_shA).applyMatrix4(cam.matrixWorldInverse);
+    const dx = Math.round(_shC.x / texel) * texel - _shC.x, dy = Math.round(_shC.y / texel) * texel - _shC.y;
+    _shM.extractRotation(cam.matrixWorld);
+    _shC.set(-dx, -dy, 0).applyMatrix4(_shM);
+    cam.position.add(_shC); cam.updateMatrixWorld();
+    _shM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    this._frustum.setFromProjectionMatrix(_shM);
+    this.matrix.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+    this.matrix.multiply(cam.projectionMatrix).multiply(cam.matrixWorldInverse);
+  };
+}
+
+/* Éclairage d'environnement cohérent avec le ciel : la voûte (même shader) + un sol sombre, filtrés en PMREM.
+   Recalculé seulement au changement d'ambiance ; réservé à la qualité haute. */
+let skyEnvRT = null, envScene = null, envGround = null, pmremGen = null;
+function updateSkyEnv(E) {
+  if (skyEnvRT) { skyEnvRT.dispose(); skyEnvRT = null; }
+  if (quality !== 'high') return null;
+  try {
+    if (!envScene) {
+      envScene = new THREE.Scene();
+      envScene.add(new THREE.Mesh(skyGeo, sky.material));
+      envGround = new THREE.Mesh(new THREE.CircleGeometry(1500, 24), new THREE.MeshBasicMaterial({ color: 0x404040 }));
+      envGround.rotation.x = -Math.PI / 2; envGround.position.y = -25; envScene.add(envGround);
+      pmremGen = new THREE.PMREMGenerator(renderer);
+    }
+    envGround.material.color.set(E.envGround || E.hemiGround);
+    skyEnvRT = pmremGen.fromScene(envScene, 0.02, 0.1, 2000);
+    return skyEnvRT.texture;
+  } catch (e) { skyEnvRT = null; return null; }
+}
+
+/* Étalonnage final (une seule passe plein écran) :
+   flou radial léger + aberration chromatique à très haute vitesse / nitro, éclat du soleil discret,
+   courbe filmique ACES appliquée dans un espace quasi linéaire (les couleurs du jeu sont réglées en sRGB),
+   exposition, contraste, saturation, teinte des ombres et des hautes lumières, tramage anti-bandes. */
+function makeGradeShader(taps) {
+  return {
+    uniforms: {
+      tDiffuse: { value: null }, uExposure: { value: 1 }, uWhite: { value: 1.6 }, uContrast: { value: 1 }, uSat: { value: 1 },
+      uLift: { value: new THREE.Vector3() }, uGain: { value: new THREE.Vector3(1, 1, 1) },
+      uBlur: { value: 0 }, uCA: { value: 0 }, uFlare: { value: 0 }, uSunUV: { value: new THREE.Vector2(0.5, 0.8) },
+      uFlareCol: { value: new THREE.Color('#fff0d4') }, uAspect: { value: 1.7 }
+    },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `
+      precision highp float;
+      #define TAPS ${taps}
+      uniform sampler2D tDiffuse; varying vec2 vUv;
+      uniform float uExposure, uWhite, uContrast, uSat, uBlur, uCA, uFlare, uAspect;
+      uniform vec3 uLift, uGain, uFlareCol; uniform vec2 uSunUV;
+      vec3 aces(vec3 x) { return (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14); }
+      float ring(vec2 p, float r, float w) { return smoothstep(w, 0.0, abs(length(p) - r)); }
+      void main() {
+        vec2 d = vUv - vec2(0.5, 0.47);
+        vec3 col = texture2D(tDiffuse, vUv).rgb;
+        // branche sur un uniform (identique pour tous les pixels) : aucun coût quand on roule doucement
+        if (uBlur > 0.0) {
+          vec2 dir = d * uBlur * smoothstep(0.06, 0.5, length(d));   // centre de l'image net
+          vec3 acc = col; float ws = 1.0;
+          for (int i = 1; i < TAPS; i++) { float t = float(i) / float(TAPS - 1), w = 1.0 - 0.55 * t; acc += texture2D(tDiffuse, vUv - dir * t).rgb * w; ws += w; }
+          col = acc / ws;
+          col.r = mix(col.r, texture2D(tDiffuse, vUv - d * uCA).r, 0.6);
+          col.b = mix(col.b, texture2D(tDiffuse, vUv + d * uCA).b, 0.6);
+        }
+        if (uFlare > 0.0) {
+          // visibilité : le soleil est-il masqué (immeuble, nuage) ? on lit l'image à sa position
+          vec3 s = texture2D(tDiffuse, uSunUV).rgb + texture2D(tDiffuse, uSunUV + vec2(0.004, 0.0)).rgb + texture2D(tDiffuse, uSunUV - vec2(0.004, 0.0)).rgb;
+          float vis = smoothstep(2.55, 2.9, dot(s, vec3(0.333))) * uFlare;
+          vec2 a = vec2(uAspect, 1.0), sv = (vUv - uSunUV) * a;
+          float glare = exp(-length(sv) * 7.0) * 0.28 + exp(-abs(sv.y) * 90.0) * exp(-abs(sv.x) * 2.2) * 0.1;
+          vec2 ax = (vec2(0.5) - uSunUV) * a;
+          vec3 gh = vec3(1.0, 0.75, 0.45) * smoothstep(0.05, 0.0, length(sv - ax * 0.7)) * 0.07
+                  + vec3(0.45, 0.8, 1.0) * ring(sv - ax * 1.25, 0.07, 0.012) * 0.06
+                  + vec3(0.7, 1.0, 0.6) * smoothstep(0.025, 0.0, length(sv - ax * 1.6)) * 0.08
+                  + vec3(1.0, 0.5, 0.8) * smoothstep(0.11, 0.0, length(sv - ax * 2.1)) * 0.035;
+          col += (uFlareCol * glare + gh) * vis;
+        }
+        // courbe filmique dans un espace quasi linéaire, blanc normalisé
+        vec3 lin = pow(max(col, 0.0), vec3(2.2)) * uExposure;
+        col = pow(clamp(aces(lin) / aces(vec3(uWhite)), 0.0, 1.0), vec3(1.0 / 2.2));
+        float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        col = mix(vec3(l), col, uSat);
+        col = (col - 0.5) * uContrast + 0.5;
+        col = col * uGain + uLift * (1.0 - col);
+        // tramage : supprime les bandes dans le ciel et le brouillard
+        vec3 p3 = fract(vec3(gl_FragCoord.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33);
+        col += (fract((p3.x + p3.y) * p3.z) - 0.5) / 255.0;
+        gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+      }`
+  };
+}
+let gradePass = null, gradeBlur = 0;
+const _gv = new THREE.Vector3(), _gd = new THREE.Vector3();
+const GARAGE_GRADE = { exposure: 0.8, white: 1.5, contrast: 1.0, sat: 1.02, lift: [0.004, 0.006, 0.012], gain: [1, 1, 1] };
+/* réglages de l'étalonnage lus à chaque image (aucune allocation) */
+function updateGrade(dt) {
+  const U = gradePass.uniforms, garage = state === 'garage' || !ENV;
+  const G = garage ? GARAGE_GRADE : (ENV.grade || GARAGE_GRADE);
+  U.uExposure.value = G.exposure; U.uWhite.value = G.white; U.uContrast.value = G.contrast; U.uSat.value = G.sat;
+  U.uLift.value.set(G.lift[0], G.lift[1], G.lift[2]); U.uGain.value.set(G.gain[0], G.gain[1], G.gain[2]);
+  U.uAspect.value = W / Math.max(1, H);
+  // flou radial : seulement au-delà de 80 % de la vitesse max, plus fort en nitro
+  const p = garage ? 0 : Math.abs(speed) / MAX_SPEED;
+  const target = reduceMotion || garage ? 0 : clamp((p - 0.8) / 0.35, 0, 1) * 0.022 + (nitroOn ? 0.016 : 0);
+  gradeBlur += (target - gradeBlur) * Math.min(1, dt * 4);
+  if (target === 0 && gradeBlur < 0.0008) gradeBlur = 0;
+  U.uBlur.value = gradeBlur; U.uCA.value = gradeBlur * 0.12;
+  // éclat du soleil : soleil devant la caméra et dans le cadre
+  let fl = 0;
+  if (!garage && ENV.sunDisc && ENV.flare && camera) {
+    const sd = ENV.sunDir;
+    _gd.set(sd[0], sd[1], sd[2]).normalize();
+    camera.getWorldDirection(_gv);
+    const facing = _gv.dot(_gd);
+    if (facing > 0.2) {
+      _gv.copy(camera.position).addScaledVector(_gd, 900).project(camera);
+      const x = _gv.x * 0.5 + 0.5, y = _gv.y * 0.5 + 0.5;
+      U.uSunUV.value.set(x, y);
+      fl = ENV.flare * clamp((facing - 0.2) * 3, 0, 1) * (x > 0 && x < 1 && y > 0 && y < 1 ? 1 : 0);
+    }
+    if (gradePass.userData !== ENV.sunColor) { gradePass.userData = ENV.sunColor; U.uFlareCol.value.set(ENV.sunColor); }
+  }
+  U.uFlare.value = fl;
+}
+
 function setupComposer() {
-  composer = null; bloom = null;
+  if (composer) { for (const p of composer.passes) if (p.dispose) p.dispose(); composer.renderTarget1.dispose(); composer.renderTarget2.dispose(); }
+  composer = null; bloom = null; gradePass = null;
   if (quality !== 'high' || !THREE.EffectComposer || !THREE.UnrealBloomPass) return;
   try {
     const caps = renderer.capabilities;
+    // ordinateur WebGL2 : cible en virgule flottante (HDR) pour que le bloom et la courbe filmique travaillent au-delà du blanc
+    const hdr = caps.isWebGL2 && !isTouch && !!renderer.extensions.get('EXT_color_buffer_float');
     const rt = caps.isWebGL2 && THREE.WebGLMultisampleRenderTarget
-      ? new THREE.WebGLMultisampleRenderTarget(Math.max(1, W * DPR), Math.max(1, H * DPR), { format: THREE.RGBAFormat })
+      ? new THREE.WebGLMultisampleRenderTarget(Math.max(1, W * DPR), Math.max(1, H * DPR), { format: THREE.RGBAFormat, type: hdr ? THREE.HalfFloatType : THREE.UnsignedByteType })
       : undefined;
     if (rt) rt.samples = 4;
     composer = new THREE.EffectComposer(renderer, rt);
@@ -456,8 +650,17 @@ function setupComposer() {
     composer.addPass(renderPass);
     bloom = new THREE.UnrealBloomPass(new THREE.Vector2(W, H), 0.8, 0.45, 0.46);
     composer.addPass(bloom);
+    if (THREE.ShaderPass) {
+      gradePass = new THREE.ShaderPass(makeGradeShader(isTouch ? 4 : 7));
+      let last = performance.now();
+      gradePass.render = function (r, wb, rb, dt, mask) {
+        const now = performance.now(); updateGrade(Math.min(0.05, (now - last) / 1000)); last = now;
+        THREE.ShaderPass.prototype.render.call(this, r, wb, rb, dt, mask);
+      };
+      composer.addPass(gradePass);
+    }
     composer.setSize(W, H);
-  } catch (e) { composer = null; }
+  } catch (e) { composer = null; gradePass = null; }
 }
 function onResize() {
   W = innerWidth; H = innerHeight;
@@ -496,7 +699,7 @@ function buildChunk(ci, lod = 0) {
   const a0 = ci * CH, a1 = a0 + CH;
   const road = newBuf(), side = newBuf(), bld = newBuf(), neon = newBuf(), pool = newBuf(), walk = newBuf();
   const group = new THREE.Group();
-  const ctx = { side, bld, neon, pool, group, rotors: [], lod };
+  const ctx = { side, bld, neon, pool, group, rotors: [], lod, leaf: newBuf() };   // leaf : feuillage en cartes alpha-testées (life.js)
   curZone = zoneAt(a0);   // tout le tronçon est dans la même zone (zones alignées sur les tronçons)
   const profiles = { '-1': GROUND[MAP.ground](-1, curZone), '1': GROUND[MAP.ground](1, curZone) };
   for (let a = a0; a < a1; a++) {
@@ -534,6 +737,7 @@ function buildChunk(ci, lod = 0) {
   if (wm) worldUV(wm.geometry);
   add(bld, ENV.windowsLit ? MAT.bld : MAT.bldDay, true, true, !ENV.windowsLit); add(neon, MAT.neon, false);
   if (ENV.poolK > 0) add(pool, MAT.pool, true);
+  if (typeof addFoliageMesh === 'function') addFoliageMesh(group, ctx.leaf);   // végétation : 1 maillage, 1 matériau partagé (life.js)
   group.userData.rotors = ctx.rotors;
   scene.add(group);
   chunks.set(ci, group);
